@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/XeLabs/go-mysqlstack.png)](https://travis-ci.org/XeLabs/go-mysqlstack)
+[![Build Status](https://travis-ci.org/XeLabs/go-mysqlstack.png)](https://travis-ci.org/XeLabs/go-mysqlstack) [![codecov.io](https://codecov.io/gh/XeLabs/go-mysqlstack/graphs/badge.svg)](https://codecov.io/gh/XeLabs/go-mysqlstack/branch/master)
 
 # What go-mysqlstack is
 

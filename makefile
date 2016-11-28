@@ -16,4 +16,8 @@ testproto:
 testpacket:
 	go test -v ./packet
 
-.PHONY: fmt testcommon testproto testpacket
+COVPKGS = ./common ./proto ./packet
+coverage:
+	gotestcover -coverprofile=coverage.txt -v $(COVPKGS)
+
+.PHONY: fmt testcommon testproto testpacket coverage
