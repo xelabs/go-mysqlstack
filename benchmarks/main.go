@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	user     = "sbtest"
-	passwd   = "sbtest"
-	address  = "192.168.0.3:3306"
+	user     = "benchyou"
+	passwd   = "benchyou"
+	address  = "192.168.0.2:3306"
 	database = "sbtest"
 )
 
@@ -30,7 +30,7 @@ func main() {
 		panic(err)
 	}
 
-	stack, err := driver.NewConn(user, passwd, "tcp", address, database)
+	stack, err := driver.NewConn(user, passwd, address, database)
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +45,7 @@ func main() {
 	}
 }
 
-func readAllMysqlstack(db *driver.Conn) string {
+func readAllMysqlstack(db driver.Conn) string {
 	rows, err := db.Query("SELECT name FROM mysqldriver_benchmarks")
 	if err != nil {
 		panic(err)
@@ -53,7 +53,7 @@ func readAllMysqlstack(db *driver.Conn) string {
 
 	count := 0
 	for rows.Next() {
-		name := rows.String()
+		name := rows.Datas()
 		count++
 		_ = name
 	}
@@ -115,7 +115,7 @@ func objectsInHEAP(fn func() string) {
 }
 
 func preFillRecords(num int) {
-	conn, err := driver.NewConn(user, passwd, "tcp", address, database)
+	conn, err := driver.NewConn(user, passwd, address, database)
 	if err != nil {
 		panic(err)
 	}
