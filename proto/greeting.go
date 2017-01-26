@@ -59,14 +59,14 @@ func (g *Greeting) Pack() []byte {
 	buf.WriteU8(g.protocolVersion)
 
 	// string[NUL]: server version
-	buf.WriteString(g.serverVersion, len(g.serverVersion))
+	buf.WriteString(g.serverVersion)
 	buf.WriteZero(1)
 
 	// 4: connection id
 	buf.WriteU32(g.connectionID)
 
 	// string[8]: auth-plugin-data-part-1
-	buf.WriteBytes(g.Salt, 8)
+	buf.WriteBytes(g.Salt[:8])
 
 	// 1: [00] filler
 	buf.WriteZero(1)
@@ -95,13 +95,13 @@ func (g *Greeting) Pack() []byte {
 
 	// string[$len]: auth-plugin-data-part-2 ($len=MAX(13, length of auth-plugin-data - 8))
 	if (g.Capability & consts.CLIENT_SECURE_CONNECTION) > 0 {
-		buf.WriteBytes(g.Salt[8:], len(g.Salt)-8)
+		buf.WriteBytes(g.Salt[8:])
 	}
 
 	// string[NUL]    auth-plugin name
 	if (g.Capability & consts.CLIENT_PLUGIN_AUTH) > 0 {
 		pluginName := "mysql_native_password"
-		buf.WriteString(pluginName, len(pluginName))
+		buf.WriteString(pluginName)
 		buf.WriteZero(1)
 	}
 

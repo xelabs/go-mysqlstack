@@ -25,10 +25,10 @@ func TestERR(t *testing.T) {
 		// error_code
 		buff.WriteU16(0x01)
 		// sql_state_marker
-		buff.WriteString("a", 1)
+		buff.WriteString("a")
 		// sql_state
-		buff.WriteString("ABCDE", 5)
-		buff.WriteString("ERROR", 5)
+		buff.WriteString("ABCDE")
+		buff.WriteString("ERROR")
 
 		want := NewERR()
 		want.Header = 0xff
@@ -52,7 +52,7 @@ func TestERR(t *testing.T) {
 		// error_code
 		buff.WriteU16(0x01)
 		// sql_state_marker
-		buff.WriteString("ERROR", 5)
+		buff.WriteString("ERROR")
 
 		want := NewERR()
 		want.Header = 0xff

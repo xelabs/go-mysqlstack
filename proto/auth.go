@@ -136,28 +136,28 @@ func (a *Auth) Pack(
 	buf.WriteZero(23)
 
 	// string[NUL] username
-	buf.WriteString(username, len(username))
+	buf.WriteString(username)
 	buf.WriteZero(1)
 
 	if (capabilityFlags & consts.CLIENT_SECURE_CONNECTION) > 0 {
 		// 1 length of auth-response
 		// string[n]  auth-response
 		buf.WriteU8(uint8(len(authResponse)))
-		buf.WriteBytes(authResponse, len(authResponse))
+		buf.WriteBytes(authResponse)
 	} else {
-		buf.WriteBytes(authResponse, len(authResponse))
+		buf.WriteBytes(authResponse)
 		buf.WriteZero(1)
 	}
 	capabilityFlags &= ^consts.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
 
 	// string[NUL] database
 	if capabilityFlags&consts.CLIENT_CONNECT_WITH_DB > 0 {
-		buf.WriteString(database, len(database))
+		buf.WriteString(database)
 		buf.WriteZero(1)
 	}
 
 	// string[NUL] auth plugin name
-	buf.WriteString(DefaultAuthPluginName, len(DefaultAuthPluginName))
+	buf.WriteString(DefaultAuthPluginName)
 	buf.WriteZero(1)
 
 	// CLIENT_CONNECT_ATTRS none

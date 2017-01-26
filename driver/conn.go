@@ -17,91 +17,122 @@ import (
 	"net"
 )
 
-type Conn struct {
+type Conn interface {
+	Cleanup()
+	Close() error
+	Closed() bool
+	NextPacket() ([]byte, error)
+	Query(sql string) (rows Rows, err error)
+	Exec(sql string) (rows Rows, err error)
+}
+
+type conn struct {
 	netConn  net.Conn
 	greeting *proto.Greeting
 	auth     *proto.Auth
 	packets  *packet.Packets
 }
 
-func NewConn(username, password, protocol, address, database string) (*Conn, error) {
-	netconn, err := net.Dial(protocol, address)
-	if err != nil {
+func (c *conn) handleErrorPacket(data []byte) error {
+	if data[0] == proto.ERR_PACKET {
+		pkt, e := c.packets.ParseERR(data, c.greeting.Capability)
+		if e != nil {
+			c.Cleanup()
+			return e
+		}
+		return errors.New(pkt.ErrorMessage)
+	}
+
+	return nil
+}
+
+func NewConn(username, password, address, database string) (c *conn, err error) {
+	var payload []byte
+
+	c = &conn{}
+	if c.netConn, err = net.Dial("tcp", address); err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	conn := &Conn{
-		netConn:  netconn,
-		greeting: proto.NewGreeting(0),
-		auth:     proto.NewAuth(),
-		packets:  packet.NewPackets(netconn),
-	}
+	c.auth = proto.NewAuth()
+	c.greeting = proto.NewGreeting(0)
+	c.packets = packet.NewPackets(c.netConn)
 
 	{
+
 		// greeting read
-		payload, err := conn.packets.Next()
-		if err != nil {
-			return nil, err
+		if payload, err = c.packets.Next(); err != nil {
+			c.Cleanup()
+			return
+		}
+		if err = c.handleErrorPacket(payload); err != nil {
+			return
 		}
 
 		// greeting unpack
-		err = conn.greeting.UnPack(payload)
-		if err != nil {
-			return nil, err
+		if err = c.greeting.UnPack(payload); err != nil {
+			c.Cleanup()
+			return
 		}
 	}
 
 	{
 		// auth pack
-		payload := conn.auth.Pack(
-			conn.greeting.Capability,
-			conn.greeting.Charset,
+		payload := c.auth.Pack(
+			c.greeting.Capability,
+			c.greeting.Charset,
 			username,
 			password,
-			conn.greeting.Salt,
+			c.greeting.Salt,
 			database,
 		)
 
 		// auth write
-		err := conn.packets.Write(payload)
-		if err != nil {
-			return nil, err
+		if err = c.packets.Write(payload); err != nil {
+			c.Cleanup()
+			return
 		}
 	}
 
 	{
 		// read
-		payload, err := conn.packets.Next()
-		if err != nil {
-			return nil, err
+		if payload, err = c.packets.Next(); err != nil {
+			c.Cleanup()
+			return
 		}
 
-		if payload[0] != proto.OK_PACKET {
-			pkt, err := conn.packets.ParseERR(payload, conn.greeting.Capability)
-			if err != nil {
-				return nil, err
-			}
-			return nil, errors.New(pkt.ErrorMessage)
+		if err = c.handleErrorPacket(payload); err != nil {
+			return
 		}
 	}
 
-	return conn, nil
+	return c, nil
+}
+
+func (c *conn) NextPacket() ([]byte, error) {
+	return c.packets.Next()
+}
+
+func (c *conn) Cleanup() {
+	if c.netConn != nil {
+		c.netConn.Close()
+		c.netConn = nil
+	}
 }
 
 // Close closes the connection
-func (c *Conn) Close() error {
+func (c *conn) Close() error {
 	if c.netConn != nil {
 		if err := c.packets.WriteCommand(consts.COM_QUIT, nil); err != nil {
 			return err
 		}
-
-		if c.netConn != nil {
-			if err := c.netConn.Close(); err != nil {
-				return errors.WithStack(err)
-			}
-			c.netConn = nil
-		}
+		c.Cleanup()
 	}
 
 	return nil
+}
+
+// Closed checks the connection broken or not
+func (c *conn) Closed() bool {
+	return c.netConn == nil
 }

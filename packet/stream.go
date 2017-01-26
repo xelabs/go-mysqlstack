@@ -15,27 +15,30 @@ package packet
 
 import (
 	"bufio"
-	"github.com/pkg/errors"
 	"io"
+
+	"github.com/XeLabs/go-mysqlstack/common"
+	"github.com/pkg/errors"
 )
 
-const PACKET_MAX_SIZE = (1<<24 - 1) // (16MB - 1）
-const PACKET_BUFFER_SIZE = 1500     // default MTU
+const PACKET_BUFFER_SIZE = 1500 // default MTU
 
 type Stream struct {
-	writer io.Writer
-	reader *bufio.Reader
-	buffer []byte
-	offset int
-	header []byte
+	writer     io.Writer
+	reader     *bufio.Reader
+	buffer     []byte
+	offset     int
+	header     []byte
+	pktMaxSize int
 }
 
-func NewStream(c io.ReadWriter) *Stream {
+func NewStream(c io.ReadWriter, pktMaxSize int) *Stream {
 	return &Stream{
-		writer: c,
-		reader: bufio.NewReaderSize(c, 4096),
-		buffer: make([]byte, PACKET_BUFFER_SIZE),
-		header: make([]byte, 4),
+		writer:     c,
+		reader:     bufio.NewReaderSize(c, 4096),
+		buffer:     make([]byte, PACKET_BUFFER_SIZE),
+		header:     make([]byte, 4),
+		pktMaxSize: pktMaxSize,
 	}
 }
 
@@ -49,9 +52,9 @@ func (s *Stream) Read() (pkt Packet, err error) {
 	}
 	s.offset = 0
 
-	// reset buffer when it reaches PACKET_RESET_SIZE
-	if len(s.buffer) > PACKET_MAX_SIZE {
-		s.buffer = make([]byte, PACKET_BUFFER_SIZE)
+	// reset buffer when it reaches pktMaxSize
+	if len(s.buffer) > s.pktMaxSize {
+		s.buffer = make([]byte, s.pktMaxSize)
 	}
 
 	for {
@@ -80,7 +83,7 @@ func (s *Stream) Read() (pkt Packet, err error) {
 		s.offset += payLen
 		pkt.SequenceID = s.header[3]
 
-		if payLen < PACKET_MAX_SIZE {
+		if payLen < s.pktMaxSize {
 			break
 		}
 	}
@@ -91,40 +94,55 @@ func (s *Stream) Read() (pkt Packet, err error) {
 
 // Write writes the packet to writer
 func (s *Stream) Write(data []byte) error {
+	buf := common.NewBuffer(64)
+	if err := s.Append(buf, data); err != nil {
+		return err
+	}
+
+	if err := s.Flush(buf.Datas()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Stream) Append(buff *common.Buffer, data []byte) error {
 	payLen := len(data) - 4
 	sequence := data[3]
 
 	for {
 		var size int
-		if payLen < PACKET_MAX_SIZE {
-			data[0] = byte(payLen)
-			data[1] = byte(payLen >> 8)
-			data[2] = byte(payLen >> 16)
-			data[3] = sequence
+		if payLen < s.pktMaxSize {
 			size = payLen
 		} else {
-			data[0] = 0xff
-			data[1] = 0xff
-			data[2] = 0xff
-			data[3] = sequence
-			size = PACKET_MAX_SIZE
+			size = s.pktMaxSize
 		}
+		data[0] = byte(size)
+		data[1] = byte(size >> 8)
+		data[2] = byte(size >> 16)
+		data[3] = sequence
 
-		if n, err := s.writer.Write(data[:4+size]); err != nil {
-			return errors.WithStack(err)
-		} else {
-			if n != (4 + size) {
-				return ErrBadConn
-			}
-		}
-
-		if size < PACKET_MAX_SIZE {
+		// append to buffer
+		buff.WriteBytes(data[:4+size])
+		if size < s.pktMaxSize {
 			break
 		}
 
 		payLen -= size
 		data = data[size:]
 		sequence++
+	}
+
+	return nil
+}
+
+func (s *Stream) Flush(data []byte) error {
+	if n, err := s.writer.Write(data); err != nil {
+		return errors.WithStack(err)
+	} else {
+		if n != len(data) {
+			return ErrBadConn
+		}
 	}
 
 	return nil

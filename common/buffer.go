@@ -248,6 +248,12 @@ func (b *Buffer) ReadLenEncode() (v uint64, err error) {
 	}
 }
 
+func (b *Buffer) WriteLenEncodeString(s string) {
+	l := len(s)
+	b.WriteLenEncode(uint64(l))
+	b.WriteString(s)
+}
+
 func (b *Buffer) ReadLenEncodeString() (s string, err error) {
 	var l uint64
 
@@ -260,6 +266,12 @@ func (b *Buffer) ReadLenEncodeString() (s string, err error) {
 	}
 
 	return
+}
+
+func (b *Buffer) WriteLenEncodeBytes(v []byte) {
+	l := len(v)
+	b.WriteLenEncode(uint64(l))
+	b.WriteBytes(v)
 }
 
 func (b *Buffer) ReadLenEncodeBytes() (v []byte, err error) {
@@ -306,7 +318,8 @@ func (b *Buffer) ReadZero(n int) (err error) {
 	return
 }
 
-func (b *Buffer) WriteString(s string, n int) {
+func (b *Buffer) WriteString(s string) {
+	n := len(s)
 	b.extend(n)
 	copy(b.buf[b.pos:], s)
 	b.pos += n
@@ -318,7 +331,8 @@ func (b *Buffer) ReadString(n int) (s string, err error) {
 		return
 	}
 
-	s = BytesToString(b.buf[b.seek:(b.seek + n)])
+	//s = BytesToString(b.buf[b.seek:(b.seek + n)])
+	s = string(b.buf[b.seek:(b.seek + n)])
 	b.seek += n
 
 	return
@@ -332,7 +346,8 @@ func (b *Buffer) ReadStringNUL() (s string, err error) {
 	if v, err = b.readBytesWithToken(0x00); err != nil {
 		return
 	}
-	s = BytesToString(v)
+	//s = BytesToString(v)
+	s = string(v)
 
 	return
 }
@@ -345,7 +360,8 @@ func (b *Buffer) ReadStringEOF() (s string, err error) {
 	if v, err = b.readBytesWithToken(0xfe); err != nil {
 		return
 	}
-	s = BytesToString(v)
+	//s = BytesToString(v)
+	s = string(v)
 
 	return
 }
@@ -376,7 +392,8 @@ func (b *Buffer) readBytesWithToken(token uint8) (v []byte, err error) {
 	return
 }
 
-func (b *Buffer) WriteBytes(bs []byte, n int) {
+func (b *Buffer) WriteBytes(bs []byte) {
+	n := len(bs)
 	b.extend(n)
 	copy(b.buf[b.pos:], bs)
 	b.pos += n

@@ -22,11 +22,11 @@ func TestBuffer(t *testing.T) {
 	buf.WriteU32(30)
 	buf.WriteU8(208)
 	buf.WriteU16(65535)
-	buf.WriteBytes([]byte{1, 2, 3, 4, 5}, 5)
+	buf.WriteBytes([]byte{1, 2, 3, 4, 5})
 	buf.WriteZero(3)
-	buf.WriteString("abc", 3)
+	buf.WriteString("abc")
 	buf.WriteEOF(1)
-	buf.WriteString("xyz", 3)
+	buf.WriteString("xyz")
 	buf.WriteEOF(2)
 	buf.WriteU24(1024)
 
@@ -113,7 +113,7 @@ func TestBuffer(t *testing.T) {
 func TestBufferDatas(t *testing.T) {
 	buf := NewBuffer(100)
 	buf.WriteU32(22222232)
-	buf.WriteString("abc", 3)
+	buf.WriteString("abc")
 	buf.WriteZero(2)
 
 	{
@@ -363,7 +363,7 @@ func TestBufferLenEncodeString(t *testing.T) {
 	}
 
 	{
-		buf.WriteString(s, len(s))
+		buf.WriteString(s)
 	}
 
 	{
@@ -379,7 +379,7 @@ func TestBufferLenEncodeString(t *testing.T) {
 	}
 
 	{
-		buf.WriteBytes(data, len(data))
+		buf.WriteBytes(data)
 	}
 
 	reader := ReadBuffer(buf.Datas())
@@ -406,22 +406,22 @@ func TestBufferNULEOF(t *testing.T) {
 	data2 := "radon"
 
 	{
-		buf.WriteString(data1, len(data1))
+		buf.WriteString(data1)
 		buf.WriteZero(1)
 	}
 
 	{
-		buf.WriteString(data2, len(data2))
+		buf.WriteString(data2)
 		buf.WriteZero(1)
 	}
 
 	{
-		buf.WriteString(data1, len(data1))
+		buf.WriteString(data1)
 		buf.WriteEOF(1)
 	}
 
 	{
-		buf.WriteString(data2, len(data2))
+		buf.WriteString(data2)
 		buf.WriteEOF(1)
 	}
 

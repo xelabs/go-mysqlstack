@@ -1,3 +1,5 @@
+export PATH := $(GOPATH)/bin:$(PATH)
+
 fmt:
 	go fmt ./...
 
@@ -6,6 +8,7 @@ test:
 	@$(MAKE) testcommon
 	@$(MAKE) testproto
 	@$(MAKE) testpacket
+	@$(MAKE) testdriver
 
 testcommon:
 	go test -v ./common
@@ -15,6 +18,9 @@ testproto:
 
 testpacket:
 	go test -v ./packet
+
+testdriver:
+	go test -v ./driver
 
 COVPKGS = ./common ./proto ./packet
 coverage:
