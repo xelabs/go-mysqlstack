@@ -14,80 +14,57 @@
 package packet
 
 import (
-	"bufio"
 	"io"
 
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/pkg/errors"
 )
 
-const PACKET_BUFFER_SIZE = 1500 // default MTU
-
 type Stream struct {
-	writer     io.Writer
-	reader     *bufio.Reader
-	buffer     []byte
-	offset     int
-	header     []byte
 	pktMaxSize int
+	rw         *ReaderWriter
 }
 
 func NewStream(c io.ReadWriter, pktMaxSize int) *Stream {
 	return &Stream{
-		writer:     c,
-		reader:     bufio.NewReaderSize(c, 4096),
-		buffer:     make([]byte, PACKET_BUFFER_SIZE),
-		header:     make([]byte, 4),
 		pktMaxSize: pktMaxSize,
+		rw:         NewReaderWriter(c),
 	}
 }
 
 // Read reads the next packet from the reader
 // The returned pkt.Payload is only guaranteed to be valid until the next read
 func (s *Stream) Read() (pkt Packet, err error) {
-	extend := func(size int) {
-		buf := make([]byte, size)
-		copy(buf, s.buffer[:s.offset])
-		s.buffer = buf
-	}
-	s.offset = 0
-
-	// reset buffer when it reaches pktMaxSize
-	if len(s.buffer) > s.pktMaxSize {
-		s.buffer = make([]byte, s.pktMaxSize)
-	}
+	var datas []byte
 
 	for {
+		var header []byte
+		var body []byte
+
 		// read packet header [32 bit]
-		if _, err = io.ReadFull(s.reader, s.header); err != nil {
-			err = errors.WithStack(err)
+		if header, err = s.rw.Read(4); err != nil {
 			return
 		}
 
 		// payload length [24 bit]
-		payLen := int(uint32(s.header[0]) | uint32(s.header[1])<<8 | uint32(s.header[2])<<16)
+		payLen := int(uint32(header[0]) | uint32(header[1])<<8 | uint32(header[2])<<16)
+		pkt.SequenceID = header[3]
 
-		// resize the buffer
-		total := s.offset + payLen
-		if total > len(s.buffer) {
-			extend(total)
-		}
-
-		// read payload [payLen bytes]
-		buf := s.buffer[s.offset : s.offset+payLen]
-		if _, err = io.ReadFull(s.reader, buf); err != nil {
-			err = errors.WithStack(err)
+		if body, err = s.rw.Read(payLen); err != nil {
 			return
 		}
 
-		s.offset += payLen
-		pkt.SequenceID = s.header[3]
+		// more chunks
+		if datas != nil {
+			datas = append(datas, body...)
+		} else {
+			datas = body
+		}
 
 		if payLen < s.pktMaxSize {
 			break
 		}
 	}
-	pkt.Payload = s.buffer[:s.offset]
+	pkt.Payload = datas
 
 	return
 }
@@ -136,14 +113,6 @@ func (s *Stream) Append(buff *common.Buffer, data []byte) error {
 	return nil
 }
 
-func (s *Stream) Flush(data []byte) error {
-	if n, err := s.writer.Write(data); err != nil {
-		return errors.WithStack(err)
-	} else {
-		if n != len(data) {
-			return ErrBadConn
-		}
-	}
-
-	return nil
+func (s *Stream) Flush(datas []byte) error {
+	return s.rw.Write(datas)
 }

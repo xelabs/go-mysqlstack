@@ -79,14 +79,8 @@ func (r *TextRows) Close() error {
 	return nil
 }
 
-// since packet datas is only guaranteed to be valid
-// until the next read, we return cloned bytes
 func (r *TextRows) Datas() []byte {
-	l := r.buffer.Length()
-	data := make([]byte, l)
-	copy(data, r.buffer.Datas())
-
-	return data
+	return r.buffer.Datas()
 }
 
 func (r *TextRows) Fields() []*proto.Column {
