@@ -43,11 +43,6 @@ func (rw *ReaderWriter) Read(need int) ([]byte, error) {
 		rw.offset = 0
 	}
 
-	// shrink the buffer to PACKET_BUFFER_SIZE
-	if rw.left == 0 && len(rw.buffer) > PACKET_BUFFER_SIZE {
-		extend(PACKET_BUFFER_SIZE)
-	}
-
 	// read more datas to the buffer
 	if rw.left < need {
 		// extend the buffer
