@@ -46,8 +46,8 @@ func main() {
 
 	fmt.Println("Legend:\n" +
 		" * HEAP:       total number of allocated objects\n" +
-		" * TotalAlloc: bytes allocated (even if freed)\n" +
-		" * Mallocs:    number of mallocs")
+		" * Mallocs:    number of mallocs\n" +
+		" * AllocBytes: bytes allocated (even if freed)\n")
 }
 
 func readAllMysqlstack(db driver.Conn) string {
@@ -120,7 +120,7 @@ func objectsInHEAP(fn func() string) {
 	diff := memStats.HeapObjects - objects
 	adiff := memStats.TotalAlloc - totalAlloc
 	mdiff := memStats.Mallocs - mallocs
-	fmt.Println(prefix, "\tHEAP", diff, "\tTotalAlloc", adiff, "\tMallocs", mdiff, "\ttime", took)
+	fmt.Println(prefix, "\tHEAP", diff, "\tMallocs", mdiff, "\tAllocBytes", adiff, "\ttime", took)
 }
 
 func preFillRecords(num int) {

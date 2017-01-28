@@ -331,7 +331,6 @@ func (b *Buffer) ReadString(n int) (s string, err error) {
 		return
 	}
 
-	//s = BytesToString(b.buf[b.seek:(b.seek + n)])
 	s = string(b.buf[b.seek:(b.seek + n)])
 	b.seek += n
 
@@ -346,7 +345,6 @@ func (b *Buffer) ReadStringNUL() (s string, err error) {
 	if v, err = b.readBytesWithToken(0x00); err != nil {
 		return
 	}
-	//s = BytesToString(v)
 	s = string(v)
 
 	return
@@ -360,7 +358,6 @@ func (b *Buffer) ReadStringEOF() (s string, err error) {
 	if v, err = b.readBytesWithToken(0xfe); err != nil {
 		return
 	}
-	//s = BytesToString(v)
 	s = string(v)
 
 	return
