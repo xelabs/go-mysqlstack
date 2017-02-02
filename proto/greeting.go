@@ -17,12 +17,21 @@ import (
 type Greeting struct {
 	protocolVersion uint8
 	Charset         uint8
-	status          uint16
-	Capability      uint32
-	connectionID    uint32
-	Salt            []byte
-	serverVersion   string
-	authPluginName  string
+
+	// StatusFlags are the status flags we will base our returned flags on.
+	// It is only used by the server.
+	status uint16
+
+	// Capabilities is the current set of features this connection
+	// is using.  It is the features that are both supported by
+	// the client and the server, and currently in use.
+	// It is set after the initial handshake.
+
+	Capability     uint32
+	connectionID   uint32
+	Salt           []byte
+	serverVersion  string
+	authPluginName string
 }
 
 func NewGreeting(connectionID uint32) *Greeting {

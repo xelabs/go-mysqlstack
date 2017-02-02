@@ -13,57 +13,76 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/XeLabs/go-mysqlstack/proto"
 	"github.com/stretchr/testify/assert"
+
+	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
+	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
-func TestRowsNext(t *testing.T) {
-	port := randomPort(8000, 9000)
-	address := fmt.Sprintf(":%d", port)
-
-	result1 := &MockResult{
-		Fields: []*proto.Column{
-			{Name: "id"},
-			{Name: "col"},
-		},
-		AffectedRows: 0,
-		LastInsertID: 0,
-		Rows: [][][]byte{
+func TestRows(t *testing.T) {
+	th := newTestHandler()
+	result1 := &sqltypes.Result{
+		Fields: []*querypb.Field{
 			{
-				[]byte("11"),
-				[]byte("12"),
+				Name: "id",
+				Type: querypb.Type_INT32,
 			},
 			{
-				[]byte("21"),
-				[]byte("22"),
+				Name: "name",
+				Type: querypb.Type_VARCHAR,
+			},
+		},
+		Rows: [][]sqltypes.Value{
+			{
+				sqltypes.MakeTrusted(querypb.Type_INT32, []byte("10")),
+				sqltypes.MakeTrusted(querypb.Type_VARCHAR, []byte("nice name")),
+			},
+			{
+				sqltypes.MakeTrusted(querypb.Type_INT32, []byte("20")),
+				sqltypes.NULL,
 			},
 		},
 	}
+	result2 := &sqltypes.Result{
+		RowsAffected: 123,
+		InsertID:     123456789,
+	}
 
-	// mysql server
-	mysql, cleanup := NewMockServer(port)
-	mysql.Start()
-	defer cleanup()
-
-	// mysql client
-	conn, err := NewConn("mock", "mock", address, "test")
+	address := fmt.Sprintf(":%d", randomPort(8000, 9000))
+	server, err := NewListener(address, th)
 	assert.Nil(t, err)
-	defer conn.Close()
+
+	go func() {
+		server.Accept()
+	}()
 
 	// query
 	{
-		mysql.SetResult(result1)
-		rows, _ := conn.Query("select * from mock")
-		for rows.Next() {
-			assert.NotNil(t, rows.Datas())
-		}
-		err := rows.LastError()
+		th.setResult(result2)
+		client, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		rows, err := client.Query("select")
 		assert.Nil(t, err)
 
-		fields := rows.Fields()
-		assert.Equal(t, result1.Fields, fields)
+		assert.Equal(t, uint64(123), rows.RowsAffected())
+		assert.Equal(t, uint64(123456789), rows.LastInsertID())
+	}
 
-		rows.RowsAffected()
-		rows.InsertID()
+	// query
+	{
+		th.setResult(result1)
+		client, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		rows, err := client.Query("select")
+		assert.Nil(t, err)
+		assert.Equal(t, result1.Fields, rows.Fields())
+		for rows.Next() {
+			_ = rows.Datas()
+			_, _ = rows.RowValues()
+		}
 	}
 }

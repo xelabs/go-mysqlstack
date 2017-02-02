@@ -129,10 +129,10 @@ func preFillRecords(num int) {
 	if err != nil {
 		panic(err)
 	}
-	if _, err := conn.Exec(`DROP TABLE IF EXISTS mysqldriver_benchmarks`); err != nil {
+	if err := conn.Exec(`DROP TABLE IF EXISTS mysqldriver_benchmarks`); err != nil {
 		panic(err)
 	}
-	if _, err := conn.Exec(`CREATE TABLE mysqldriver_benchmarks (
+	if err := conn.Exec(`CREATE TABLE mysqldriver_benchmarks (
 		id int NOT NULL AUTO_INCREMENT,
 		name varchar(255),
 		age int,
@@ -142,19 +142,19 @@ func preFillRecords(num int) {
 	}
 
 	for i := 0; i < num; i++ {
-		_, err := conn.Exec(`INSERT INTO mysqldriver_benchmarks(name) VALUES("name` + strconv.Itoa(i) + `")`)
-		if err != nil {
+		if err := conn.Exec(`INSERT INTO mysqldriver_benchmarks(name) VALUES("name` + strconv.Itoa(i) + `")`); err != nil {
 			panic(err)
 		}
 	}
 
 	// warm up
 	rows, err := conn.Query("SELECT name FROM mysqldriver_benchmarks")
-	if err != nil {
+    if err != nil {
 		panic(err)
 	}
-	for rows.Next() {
-	}
+    if err := rows.Close(); err != nil {
+        panic(err)
+    }
 
 	conn.Close()
 }

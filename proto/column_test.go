@@ -10,8 +10,12 @@
 package proto
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/stretchr/testify/assert"
+
+	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 func TestColumnCount(t *testing.T) {
@@ -26,21 +30,20 @@ func TestColumnCount(t *testing.T) {
 }
 
 func TestColumn(t *testing.T) {
-	want := &Column{
-		Catalog:    "def",
-		Schema:     "sbtest",
-		Table:      "t1",
-		Org_Table:  "t1",
-		Name:       "a",
-		Org_Name:   "a",
-		Charset:    63,
-		ColumnLen:  11,
-		FieldType:  3,
-		FieldFlags: 20483,
+	want := &querypb.Field{
+		Database:     "test",
+		Table:        "t1",
+		OrgTable:     "t1",
+		Name:         "a",
+		OrgName:      "a",
+		Charset:      11,
+		ColumnLength: 11,
+		Type:         sqltypes.Int32,
+		Flags:        11,
 	}
 
-	got := &Column{}
-	err := got.UnPack(want.Pack())
+	datas := PackColumn(want)
+	got, err := UnpackColumn(datas)
 	assert.Nil(t, err)
 	assert.Equal(t, want, got)
 }

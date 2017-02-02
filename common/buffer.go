@@ -281,8 +281,10 @@ func (b *Buffer) ReadLenEncodeBytes() (v []byte, err error) {
 		return
 	}
 
-	if v, err = b.ReadBytes(int(l)); err != nil {
-		return
+	if l > 0 {
+		if v, err = b.ReadBytes(int(l)); err != nil {
+			return
+		}
 	}
 
 	return

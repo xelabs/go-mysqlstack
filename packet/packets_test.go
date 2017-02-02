@@ -14,7 +14,10 @@ import (
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/proto"
+	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 	"github.com/stretchr/testify/assert"
+
+	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 func TestPacketsNext(t *testing.T) {
@@ -191,89 +194,32 @@ func TestPacketsWriteCommand(t *testing.T) {
 	}
 }
 
-func TestPacketsParseERR(t *testing.T) {
-	buff := common.NewBuffer(32)
-	conn := NewMockConn()
-	packets := NewPackets(conn)
-
-	// header
-	buff.WriteU8(0xff)
-	// error_code
-	buff.WriteU16(0x01)
-	// sql_state_marker
-	buff.WriteString("a")
-	// sql_state
-	buff.WriteString("ABCDE")
-	buff.WriteString("ERROR")
-
-	want := proto.NewERR()
-	want.Header = 0xff
-	want.ErrorCode = 0x1
-	want.SQLStateMarker = "a"
-	want.SQLState = "ABCDE"
-	want.ErrorMessage = "ERROR"
-
-	got, err := packets.ParseERR(buff.Datas(), proto.DefaultCapability)
-	assert.Nil(t, err)
-	assert.Equal(t, want, got)
-}
-
-func TestPacketsParseOK(t *testing.T) {
-	buff := common.NewBuffer(32)
-	conn := NewMockConn()
-	packets := NewPackets(conn)
-
-	// header
-	buff.WriteU8(0x00)
-	// affected_rows
-	buff.WriteLenEncode(uint64(3))
-	// last_insert_id
-	buff.WriteLenEncode(uint64(40000000000))
-
-	// status_flags
-	buff.WriteU16(0x01)
-	// warnings
-	buff.WriteU16(0x02)
-
-	want := proto.NewOK()
-	want.AffectedRows = 3
-	want.LastInsertID = 40000000000
-	want.StatusFlags = 1
-	want.Warnings = 2
-
-	got, err := packets.ParseOK(buff.Datas(), proto.DefaultCapability)
-	assert.Nil(t, err)
-	assert.Equal(t, want, got)
-}
-
 func TestPacketsColumns(t *testing.T) {
 	conn := NewMockConn()
 	wPackets := NewPackets(conn)
 	rPackets := NewPackets(conn)
-	columns := []*proto.Column{
-		&proto.Column{
-			Catalog:    "def",
-			Schema:     "test",
-			Table:      "t1",
-			Org_Table:  "t1",
-			Name:       "a",
-			Org_Name:   "a",
-			Charset:    11,
-			ColumnLen:  11,
-			FieldType:  11,
-			FieldFlags: 11,
+	columns := []*querypb.Field{
+		&querypb.Field{
+			Database:     "test",
+			Table:        "t1",
+			OrgTable:     "t1",
+			Name:         "a",
+			OrgName:      "a",
+			Charset:      11,
+			ColumnLength: 11,
+			Type:         sqltypes.Int32,
+			Flags:        11,
 		},
-		&proto.Column{
-			Catalog:    "def",
-			Schema:     "test",
-			Table:      "t1",
-			Org_Table:  "t1",
-			Name:       "b",
-			Org_Name:   "b",
-			Charset:    12,
-			ColumnLen:  12,
-			FieldType:  12,
-			FieldFlags: 12,
+		&querypb.Field{
+			Database:     "test",
+			Table:        "t1",
+			OrgTable:     "t1",
+			Name:         "b",
+			OrgName:      "b",
+			Charset:      12,
+			ColumnLength: 12,
+			Type:         sqltypes.Int8,
+			Flags:        12,
 		},
 	}
 
@@ -283,7 +229,7 @@ func TestPacketsColumns(t *testing.T) {
 	}
 
 	{
-		cols, _, err := rPackets.ReadColumns(proto.DefaultCapability)
+		cols, _, err := rPackets.ReadColumns()
 		assert.Nil(t, err)
 		assert.Equal(t, columns, cols)
 	}
@@ -311,13 +257,13 @@ func TestPacketsColumnsOK(t *testing.T) {
 	}
 
 	{
-		want := proto.NewOK()
+		want := &proto.OK{}
 		want.AffectedRows = 3
 		want.LastInsertID = 40000000000
 		want.StatusFlags = 1
 		want.Warnings = 2
 
-		_, got, err := rPackets.ReadColumns(proto.DefaultCapability)
+		_, got, err := rPackets.ReadColumns()
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	}
@@ -344,7 +290,7 @@ func TestPacketsColumnsERR(t *testing.T) {
 
 	{
 		want := "ERROR"
-		_, _, err := rPackets.ReadColumns(proto.DefaultCapability)
+		_, _, err := rPackets.ReadColumns()
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
@@ -365,7 +311,7 @@ func TestPacketsColumnsError(t *testing.T) {
 
 	{
 		want := "EOF"
-		_, _, err := rPackets.ReadColumns(proto.DefaultCapability)
+		_, _, err := rPackets.ReadColumns()
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}

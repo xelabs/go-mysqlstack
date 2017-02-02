@@ -10,10 +10,10 @@
 package proto
 
 import (
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/XeLabs/go-mysqlstack/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestOK(t *testing.T) {
@@ -32,39 +32,26 @@ func TestOK(t *testing.T) {
 		// warnings
 		buff.WriteU16(0x02)
 
-		want := NewOK()
+		want := &OK{}
 		want.AffectedRows = 3
 		want.LastInsertID = 40000000000
 		want.StatusFlags = 1
 		want.Warnings = 2
 
-		got := NewOK()
-		err := got.UnPack(buff.Datas(), DefaultCapability)
+		got, err := UnPackOK(buff.Datas())
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	}
 
-	// &^ CLIENT_PROTOCOL_41
 	{
-		buff := common.NewBuffer(32)
-
-		// header
-		buff.WriteU8(0x00)
-		// affected_rows
-		buff.WriteLenEncode(uint64(3))
-		// last_insert_id
-		buff.WriteLenEncode(uint64(40000000000))
-
-		// status_flags
-		buff.WriteU16(0x03)
-
-		want := NewOK()
+		want := &OK{}
 		want.AffectedRows = 3
 		want.LastInsertID = 40000000000
-		want.StatusFlags = 3
+		want.StatusFlags = 1
+		want.Warnings = 2
+		datas := PackOK(want)
 
-		got := NewOK()
-		err := got.UnPack(buff.Datas(), DefaultCapability&^consts.CLIENT_PROTOCOL_41)
+		got, err := UnPackOK(datas)
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	}
@@ -86,8 +73,7 @@ func TestOKError(t *testing.T) {
 		// warnings
 		buff.WriteU16(0x02)
 
-		got := NewOK()
-		err := got.UnPack(buff.Datas(), DefaultCapability)
+		_, err := UnPackOK(buff.Datas())
 		assert.NotNil(t, err)
 	}
 }

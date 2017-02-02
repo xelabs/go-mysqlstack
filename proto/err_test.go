@@ -10,10 +10,10 @@
 package proto
 
 import (
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/XeLabs/go-mysqlstack/common"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestERR(t *testing.T) {
@@ -25,42 +25,31 @@ func TestERR(t *testing.T) {
 		// error_code
 		buff.WriteU16(0x01)
 		// sql_state_marker
-		buff.WriteString("a")
+		buff.WriteString("#")
 		// sql_state
 		buff.WriteString("ABCDE")
 		buff.WriteString("ERROR")
 
-		want := NewERR()
+		want := &ERR{}
 		want.Header = 0xff
 		want.ErrorCode = 0x1
-		want.SQLStateMarker = "a"
 		want.SQLState = "ABCDE"
 		want.ErrorMessage = "ERROR"
 
-		got := NewERR()
-		err := got.UnPack(buff.Datas(), DefaultCapability)
+		got, err := UnPackERR(buff.Datas())
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	}
 
-	// &^ CLIENT_PROTOCOL_41
 	{
-		buff := common.NewBuffer(32)
-
-		// header
-		buff.WriteU8(0xff)
-		// error_code
-		buff.WriteU16(0x01)
-		// sql_state_marker
-		buff.WriteString("ERROR")
-
-		want := NewERR()
+		want := &ERR{}
 		want.Header = 0xff
 		want.ErrorCode = 0x1
+		want.SQLState = "ABCDE"
 		want.ErrorMessage = "ERROR"
+		datas := PackERR(want)
 
-		got := NewERR()
-		err := got.UnPack(buff.Datas(), DefaultCapability&^consts.CLIENT_PROTOCOL_41)
+		got, err := UnPackERR(datas)
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	}
@@ -73,8 +62,7 @@ func TestERRError(t *testing.T) {
 		// header
 		buff.WriteU8(0x01)
 
-		got := NewERR()
-		err := got.UnPack(buff.Datas(), DefaultCapability)
+		_, err := UnPackERR(buff.Datas())
 		assert.NotNil(t, err)
 	}
 }

@@ -10,6 +10,7 @@
 package consts
 
 // https://dev.mysql.com/doc/internals/en/command-phase.html
+// include/my_command.h
 const (
 	COM_SLEEP byte = iota
 	COM_QUIT

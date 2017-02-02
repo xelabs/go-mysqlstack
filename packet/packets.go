@@ -10,11 +10,14 @@
 package packet
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/proto"
 	"github.com/pkg/errors"
+
+	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 const (
@@ -142,24 +145,18 @@ func (p *Packets) ResetSeq() {
 	p.seq = 0
 }
 
-func (p *Packets) ParseERR(data []byte, capabilityFlags uint32) (e *proto.ERR, err error) {
-	e = proto.NewERR()
-	err = e.UnPack(data, capabilityFlags)
-
-	return
+func (p *Packets) ParseERR(data []byte) (*proto.ERR, error) {
+	return proto.UnPackERR(data)
 }
 
-func (p *Packets) ParseOK(data []byte, capabilityFlags uint32) (ok *proto.OK, err error) {
-	ok = proto.NewOK()
-	err = ok.UnPack(data, capabilityFlags)
-
-	return
+func (p *Packets) ParseOK(data []byte) (*proto.OK, error) {
+	return proto.UnPackOK(data)
 }
 
 // ReadColumns parses columns info
 // http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::Resultset
-func (p *Packets) ReadColumns(capabilityFlags uint32) (
-	columns []*proto.Column,
+func (p *Packets) ReadColumns() (
+	columns []*querypb.Field,
 	ok *proto.OK,
 	err error) {
 	var count uint64
@@ -170,17 +167,17 @@ func (p *Packets) ReadColumns(capabilityFlags uint32) (
 		return
 	}
 
-	ok = proto.NewOK()
+	ok = &proto.OK{}
 	switch payload[0] {
 	case proto.OK_PACKET:
 		// maybe we are OK response, such as Exec response
-		if ok, err = p.ParseOK(payload, capabilityFlags); err != nil {
+		if ok, err = p.ParseOK(payload); err != nil {
 			return
 		}
 		return
 
 	case proto.ERR_PACKET:
-		if pkt, err = p.ParseERR(payload, capabilityFlags); err != nil {
+		if pkt, err = p.ParseERR(payload); err != nil {
 			return
 		}
 		err = errors.New(pkt.ErrorMessage)
@@ -193,17 +190,18 @@ func (p *Packets) ReadColumns(capabilityFlags uint32) (
 	}
 
 	// column info
-	columns = make([]*proto.Column, 0, count)
+	columns = make([]*querypb.Field, 0, count)
 	for i := 0; i < int(count); i++ {
 		if payload, err = p.Next(); err != nil {
 			return
 		}
 
-		col := &proto.Column{}
-		if err = col.UnPack(payload); err != nil {
+		column, perr := proto.UnpackColumn(payload)
+		if perr != nil {
+			err = perr
 			return
 		}
-		columns = append(columns, col)
+		columns = append(columns, column)
 	}
 
 	// EOF packet
@@ -219,7 +217,7 @@ func (p *Packets) ReadColumns(capabilityFlags uint32) (
 }
 
 // WriteColumns writes columns packet to stream
-func (p *Packets) WriteColumns(columns []*proto.Column) (err error) {
+func (p *Packets) WriteColumns(columns []*querypb.Field) (err error) {
 	batch := common.NewBuffer(128)
 
 	// column count
@@ -233,7 +231,7 @@ func (p *Packets) WriteColumns(columns []*proto.Column) (err error) {
 	// columns info
 	for i := 0; i < count; i++ {
 		buf := common.NewBuffer(64)
-		buf.WriteBytes(columns[i].Pack())
+		buf.WriteBytes(proto.PackColumn(columns[i]))
 		if err = p.Append(batch, buf.Datas()); err != nil {
 			return
 		}
@@ -249,4 +247,32 @@ func (p *Packets) WriteColumns(columns []*proto.Column) (err error) {
 	}
 
 	return
+}
+
+func (p *Packets) WriteOK(affectedRows, lastInsertID uint64, flags uint16, warnings uint16) error {
+	ok := &proto.OK{
+		AffectedRows: affectedRows,
+		LastInsertID: lastInsertID,
+		StatusFlags:  flags,
+		Warnings:     warnings,
+	}
+
+	if err := p.Write(proto.PackOK(ok)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (p *Packets) WriteERR(errorCode uint16, sqlState string, format string, args ...interface{}) error {
+	e := &proto.ERR{
+		ErrorCode:    errorCode,
+		SQLState:     sqlState,
+		ErrorMessage: fmt.Sprintf(format, args...),
+	}
+	if err := p.Write(proto.PackERR(e)); err != nil {
+		return err
+	}
+
+	return nil
 }

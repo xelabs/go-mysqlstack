@@ -43,8 +43,11 @@ func (a *Auth) Charset() uint8 {
 	return a.charset
 }
 
-// https://dev.mysql.com/doc/internals/en/connection-phase-packets.html
-// #packet-Protocol::HandshakeResponse41
+func (a *Auth) User() string {
+	return a.user
+}
+
+// https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeResponse41
 func (a *Auth) UnPack(payload []byte) (err error) {
 	buf := common.ReadBuffer(payload)
 
@@ -97,6 +100,7 @@ func (a *Auth) UnPack(payload []byte) (err error) {
 	return nil
 }
 
+// HandshakeResponse41
 func (a *Auth) Pack(
 	capabilityFlags uint32,
 	charset uint8,
