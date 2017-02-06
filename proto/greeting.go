@@ -23,6 +23,7 @@ type Greeting struct {
 
 	// StatusFlags are the status flags we will base our returned flags on.
 	// It is only used by the server.
+	// SERVER_STATUS_AUTOCOMMIT is default.
 	status uint16
 
 	// Capabilities is the current set of features this connection
@@ -64,8 +65,8 @@ func (g *Greeting) Status() uint16 {
 func (g *Greeting) Pack() []byte {
 	// greeting buffer
 	buf := common.NewBuffer(256)
-	capabilityLo := uint16(g.Capability)
-	capabilityHi := uint16(uint32(g.Capability) >> 16)
+	capLower := uint16(g.Capability)
+	capUpper := uint16(uint32(g.Capability) >> 16)
 
 	// 1: [0a] protocol version
 	buf.WriteU8(g.protocolVersion)
@@ -84,7 +85,7 @@ func (g *Greeting) Pack() []byte {
 	buf.WriteZero(1)
 
 	// 2: capability flags (lower 2 bytes)
-	buf.WriteU16(capabilityLo)
+	buf.WriteU16(capLower)
 
 	// 1: character set
 	buf.WriteU8(consts.CHARSET_UTF8)
@@ -93,7 +94,7 @@ func (g *Greeting) Pack() []byte {
 	buf.WriteU16(g.status)
 
 	// 2: capability flags (upper 2 bytes)
-	buf.WriteU16(capabilityHi)
+	buf.WriteU16(capUpper)
 
 	// Length of auth plugin data.
 	// Always 21 (8 + 13).

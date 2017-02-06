@@ -57,22 +57,49 @@ func TestOK(t *testing.T) {
 	}
 }
 
-func TestOKError(t *testing.T) {
+func TestOKUnPackError(t *testing.T) {
+	// header error
 	{
 		buff := common.NewBuffer(32)
-
 		// header
-		buff.WriteU8(0x01)
-		// affected_rows
+		buff.WriteU8(0x99)
+		_, err := UnPackOK(buff.Datas())
+		assert.NotNil(t, err)
+	}
+
+	// NULL
+	f0 := func(buff *common.Buffer) {
+	}
+
+	// Write OK header.
+	f1 := func(buff *common.Buffer) {
+		buff.WriteU8(0x00)
+	}
+
+	// Write AffectedRows.
+	f2 := func(buff *common.Buffer) {
 		buff.WriteLenEncode(uint64(3))
-		// last_insert_id
-		buff.WriteLenEncode(uint64(40000000000))
+	}
 
-		// status_flags
+	// Write LastInsertID.
+	f3 := func(buff *common.Buffer) {
+		buff.WriteLenEncode(uint64(3))
+	}
+
+	// Write Status.
+	f4 := func(buff *common.Buffer) {
 		buff.WriteU16(0x01)
-		// warnings
-		buff.WriteU16(0x02)
+	}
 
+	buff := common.NewBuffer(32)
+	fs := []func(buff *common.Buffer){f0, f1, f2, f3, f4}
+	for i := 0; i < len(fs); i++ {
+		_, err := UnPackOK(buff.Datas())
+		assert.NotNil(t, err)
+		fs[i](buff)
+	}
+
+	{
 		_, err := UnPackOK(buff.Datas())
 		assert.NotNil(t, err)
 	}

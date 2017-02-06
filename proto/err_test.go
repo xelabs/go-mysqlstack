@@ -45,7 +45,6 @@ func TestERR(t *testing.T) {
 		want := &ERR{}
 		want.Header = 0xff
 		want.ErrorCode = 0x1
-		want.SQLState = "ABCDE"
 		want.ErrorMessage = "ERROR"
 		datas := PackERR(want)
 
@@ -55,7 +54,8 @@ func TestERR(t *testing.T) {
 	}
 }
 
-func TestERRError(t *testing.T) {
+func TestERRUnPackError(t *testing.T) {
+	// header error
 	{
 		buff := common.NewBuffer(32)
 
@@ -64,5 +64,37 @@ func TestERRError(t *testing.T) {
 
 		_, err := UnPackERR(buff.Datas())
 		assert.NotNil(t, err)
+	}
+
+	// NULL
+	f0 := func(buff *common.Buffer) {
+	}
+
+	// Write error header.
+	f1 := func(buff *common.Buffer) {
+		buff.WriteU8(0xff)
+	}
+
+	// Write error code.
+	f2 := func(buff *common.Buffer) {
+		buff.WriteU16(0x01)
+	}
+
+	// Write SQLStateMarker.
+	f3 := func(buff *common.Buffer) {
+		buff.WriteU8('#')
+	}
+
+	// Write SQLState.
+	f4 := func(buff *common.Buffer) {
+		buff.WriteString("xxxxx")
+	}
+
+	buff := common.NewBuffer(32)
+	fs := []func(buff *common.Buffer){f0, f1, f2, f3, f4}
+	for i := 0; i < len(fs); i++ {
+		_, err := UnPackERR(buff.Datas())
+		assert.NotNil(t, err)
+		fs[i](buff)
 	}
 }
