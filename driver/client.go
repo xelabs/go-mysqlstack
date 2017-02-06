@@ -23,9 +23,12 @@ import (
 )
 
 type Conn interface {
-	Cleanup()
 	Close() error
 	Closed() bool
+	Cleanup()
+
+	// ConnectionID is the connection id at greeting
+	ConnectionID() uint32
 	NextPacket() ([]byte, error)
 
 	// Query gets the row iterator
@@ -128,10 +131,12 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 	return c, nil
 }
 
-func (c *conn) query(command byte, sql string) (r Rows, err error) {
+func (c *conn) query(command byte, sql string) (Rows, error) {
 	var ok *proto.OK
 	var columns []*querypb.Field
+	var err, myerr error
 
+	// if err != nil means the connection is broken(packet error)
 	defer func() {
 		if err != nil {
 			c.Cleanup()
@@ -140,11 +145,17 @@ func (c *conn) query(command byte, sql string) (r Rows, err error) {
 
 	// query
 	if err = c.packets.WriteCommand(command, common.StringToBytes(sql)); err != nil {
-		return
+		return nil, err
 	}
+
 	// columns
-	if columns, ok, err = c.packets.ReadColumns(); err != nil {
-		return
+	columns, ok, myerr, err = c.packets.ReadColumns()
+	if err != nil {
+		return nil, err
+	}
+	if myerr != nil {
+		// just return the mysql error, but not close the connection
+		return nil, myerr
 	}
 
 	rows := NewTextRows(c)
@@ -155,97 +166,70 @@ func (c *conn) query(command byte, sql string) (r Rows, err error) {
 	return rows, nil
 }
 
+// ConnectionID is the connection id at greeting
+func (c *conn) ConnectionID() uint32 {
+	return c.greeting.ConnectionID
+}
+
 // Query execute the query and return the row iterator
 func (c *conn) Query(sql string) (Rows, error) {
 	return c.query(consts.COM_QUERY, sql)
 }
 
-func (c *conn) Ping() (err error) {
-	var rows Rows
-
-	defer func() {
-		if err != nil {
-			c.Cleanup()
-		}
-	}()
-
-	if rows, err = c.query(consts.COM_PING, ""); err != nil {
-		return
+func (c *conn) Ping() error {
+	rows, err := c.query(consts.COM_PING, "")
+	if err != nil {
+		return err
 	}
 
-	if err = rows.Close(); err != nil {
-		return
+	if err := rows.Close(); err != nil {
+		return err
 	}
-	return
+
+	return nil
 }
 
-func (c *conn) InitDB(db string) (err error) {
-	var rows Rows
-
-	defer func() {
-		if err != nil {
-			c.Cleanup()
-		}
-	}()
-
-	if rows, err = c.query(consts.COM_INIT_DB, db); err != nil {
-		return
+func (c *conn) InitDB(db string) error {
+	rows, err := c.query(consts.COM_INIT_DB, db)
+	if err != nil {
+		return err
 	}
 
-	if err = rows.Close(); err != nil {
-		return
+	if err := rows.Close(); err != nil {
+		return err
 	}
-	return
+
+	return nil
 }
 
 // Exec executes the query and drain the results
-func (c *conn) Exec(sql string) (err error) {
-	var rows Rows
-
-	defer func() {
-		if err != nil {
-			c.Cleanup()
-		}
-	}()
-
-	if rows, err = c.query(consts.COM_QUERY, sql); err != nil {
-		return
+func (c *conn) Exec(sql string) error {
+	rows, err := c.query(consts.COM_QUERY, sql)
+	if err != nil {
+		return err
 	}
 
-	if err = rows.Close(); err != nil {
-		return
+	if err := rows.Close(); err != nil {
+		c.Cleanup()
 	}
-	return
+
+	return nil
 }
 
-func (c *conn) FetchAll(sql string, maxrows int) (r *sqltypes.Result, err error) {
-	var ok *proto.OK
-	var columns []*querypb.Field
+func (c *conn) FetchAll(sql string, maxrows int) (*sqltypes.Result, error) {
+	var r *sqltypes.Result
 
-	defer func() {
-		if err != nil {
-			c.Cleanup()
-		}
-	}()
-
-	// Write query request
-	if err = c.packets.WriteCommand(consts.COM_QUERY, common.StringToBytes(sql)); err != nil {
-		return
-	}
-	// Read column definition
-	if columns, ok, err = c.packets.ReadColumns(); err != nil {
-		return
+	rows, err := c.query(consts.COM_QUERY, sql)
+	if err != nil {
+		return nil, err
 	}
 
 	r = &sqltypes.Result{
-		Fields:       columns,
-		RowsAffected: ok.AffectedRows,
-		InsertID:     ok.LastInsertID,
+		Fields:       rows.Fields(),
+		RowsAffected: rows.RowsAffected(),
+		InsertID:     rows.LastInsertID(),
 	}
 
-	// Read results
-	rows := NewTextRows(c)
-	rows.fields = columns
 	for rows.Next() {
 		if len(r.Rows) == maxrows {
 			break
@@ -256,12 +240,14 @@ func (c *conn) FetchAll(sql string, maxrows int) (r *sqltypes.Result, err error)
 		}
 		r.Rows = append(r.Rows, row)
 	}
+
 	// Check last error
-	if err = rows.Close(); err != nil {
-		return
+	if err := rows.Close(); err != nil {
+		c.Cleanup()
+		return nil, err
 	}
 
-	return
+	return r, nil
 }
 
 // NextPacket used to get the next packet

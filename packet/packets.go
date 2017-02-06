@@ -155,10 +155,7 @@ func (p *Packets) ParseOK(data []byte) (*proto.OK, error) {
 
 // ReadColumns parses columns info
 // http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::Resultset
-func (p *Packets) ReadColumns() (
-	columns []*querypb.Field,
-	ok *proto.OK,
-	err error) {
+func (p *Packets) ReadColumns() (columns []*querypb.Field, ok *proto.OK, myerr error, err error) {
 	var count uint64
 	var payload []byte
 	var pkt *proto.ERR
@@ -180,7 +177,7 @@ func (p *Packets) ReadColumns() (
 		if pkt, err = p.ParseERR(payload); err != nil {
 			return
 		}
-		err = errors.New(pkt.ErrorMessage)
+		myerr = errors.New(pkt.ErrorMessage)
 		return
 	}
 

@@ -10,8 +10,11 @@
 package proto
 
 import (
+	"crypto/rand"
+
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/consts"
+	"github.com/pkg/errors"
 )
 
 type Greeting struct {
@@ -26,29 +29,29 @@ type Greeting struct {
 	// is using.  It is the features that are both supported by
 	// the client and the server, and currently in use.
 	// It is set after the initial handshake.
-
 	Capability     uint32
-	connectionID   uint32
-	Salt           []byte
+	ConnectionID   uint32
 	serverVersion  string
 	authPluginName string
+	Salt           []byte
 }
 
 func NewGreeting(connectionID uint32) *Greeting {
 	greeting := &Greeting{
 		protocolVersion: 10,
 		serverVersion:   "Radon 5.7",
-		connectionID:    connectionID,
+		ConnectionID:    connectionID,
+		Capability:      DefaultCapability,
 		Charset:         consts.CHARSET_UTF8,
 		status:          consts.SERVER_STATUS_AUTOCOMMIT,
+		Salt:            make([]byte, 20),
 	}
 
-	greeting.Capability = DefaultCapability
-	greeting.status |= consts.SERVER_STATUS_AUTOCOMMIT
-	greeting.Salt = []byte{
-		0x77, 0x63, 0x6a, 0x6d, 0x61, 0x22, 0x23, 0x27, // first part
-		0x38, 0x26, 0x55, 0x58, 0x3b, 0x5d, 0x44, 0x78, 0x53, 0x73, 0x6b, 0x41,
-		0x00}
+	// Generate the rand salts.
+	// Set to default if rand fail.
+	if _, err := rand.Read(greeting.Salt); err != nil {
+		greeting.Salt = DefaultSalt
+	}
 
 	return greeting
 }
@@ -72,7 +75,7 @@ func (g *Greeting) Pack() []byte {
 	buf.WriteZero(1)
 
 	// 4: connection id
-	buf.WriteU32(g.connectionID)
+	buf.WriteU32(g.ConnectionID)
 
 	// string[8]: auth-plugin-data-part-1
 	buf.WriteBytes(g.Salt[:8])
@@ -92,27 +95,21 @@ func (g *Greeting) Pack() []byte {
 	// 2: capability flags (upper 2 bytes)
 	buf.WriteU16(capabilityHi)
 
-	// 1: length of auth-plugin-data-part-1
-	if (g.Capability & consts.CLIENT_PLUGIN_AUTH) > 0 {
-		buf.WriteU8(uint8(len(g.Salt)))
-	} else {
-		buf.WriteZero(1)
-	}
+	// Length of auth plugin data.
+	// Always 21 (8 + 13).
+	buf.WriteU8(21)
 
 	// string[10]: reserved (all [00])
 	buf.WriteZero(10)
 
 	// string[$len]: auth-plugin-data-part-2 ($len=MAX(13, length of auth-plugin-data - 8))
-	if (g.Capability & consts.CLIENT_SECURE_CONNECTION) > 0 {
-		buf.WriteBytes(g.Salt[8:])
-	}
+	buf.WriteBytes(g.Salt[8:])
+	buf.WriteZero(1)
 
 	// string[NUL]    auth-plugin name
-	if (g.Capability & consts.CLIENT_PLUGIN_AUTH) > 0 {
-		pluginName := "mysql_native_password"
-		buf.WriteString(pluginName)
-		buf.WriteZero(1)
-	}
+	pluginName := "mysql_native_password"
+	buf.WriteString(pluginName)
+	buf.WriteZero(1)
 
 	return buf.Datas()
 }
@@ -131,7 +128,7 @@ func (g *Greeting) UnPack(payload []byte) (err error) {
 	}
 
 	// 4: connection id
-	if g.connectionID, err = buf.ReadU32(); err != nil {
+	if g.ConnectionID, err = buf.ReadU32(); err != nil {
 		return
 	}
 
@@ -148,8 +145,8 @@ func (g *Greeting) UnPack(payload []byte) (err error) {
 	}
 
 	// 2: capability flags (lower 2 bytes)
-	var CL uint16
-	if CL, err = buf.ReadU16(); err != nil {
+	var capLower uint16
+	if capLower, err = buf.ReadU16(); err != nil {
 		return
 	}
 
@@ -164,14 +161,14 @@ func (g *Greeting) UnPack(payload []byte) (err error) {
 	}
 
 	// 2: capability flags (upper 2 bytes)
-	var CH uint16
-	if CH, err = buf.ReadU16(); err != nil {
+	var capUpper uint16
+	if capUpper, err = buf.ReadU16(); err != nil {
 		return
 	}
-	g.Capability = (uint32(CH) << 16) | (uint32(CL))
+	g.Capability = (uint32(capUpper) << 16) | (uint32(capLower))
 
 	// 1: length of auth-plugin-data-part-1
-	var SLEN uint8
+	var SLEN byte
 	if (g.Capability & consts.CLIENT_PLUGIN_AUTH) > 0 {
 		if SLEN, err = buf.ReadU8(); err != nil {
 			return
@@ -189,17 +186,21 @@ func (g *Greeting) UnPack(payload []byte) (err error) {
 
 	// string[$len]: auth-plugin-data-part-2 ($len=MAX(13, length of auth-plugin-data - 8))
 	if (g.Capability & consts.CLIENT_SECURE_CONNECTION) > 0 {
-		var salt []byte
-
 		read := int(SLEN) - 8
-		if read < 0 {
+		if read < 0 || read > 13 {
 			read = 13
 		}
-
-		if salt, err = buf.ReadBytes(read); err != nil {
+		var salt2 []byte
+		if salt2, err = buf.ReadBytes(read); err != nil {
 			return
 		}
-		copy(g.Salt[8:], salt)
+
+		// The last byte has to be 0, and is not part of the data.
+		if salt2[read-1] != 0 {
+			err = errors.New("parseInitialHandshakePacket: auth-plugin-data-part-2 is not 0 terminated")
+			return
+		}
+		copy(g.Salt[8:], salt2[:read-1])
 	}
 
 	// string[NUL]    auth-plugin name

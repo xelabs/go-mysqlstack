@@ -229,7 +229,7 @@ func TestPacketsColumns(t *testing.T) {
 	}
 
 	{
-		cols, _, err := rPackets.ReadColumns()
+		cols, _, _, err := rPackets.ReadColumns()
 		assert.Nil(t, err)
 		assert.Equal(t, columns, cols)
 	}
@@ -263,7 +263,7 @@ func TestPacketsColumnsOK(t *testing.T) {
 		want.StatusFlags = 1
 		want.Warnings = 2
 
-		_, got, err := rPackets.ReadColumns()
+		_, got, _, err := rPackets.ReadColumns()
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
 	}
@@ -290,8 +290,8 @@ func TestPacketsColumnsERR(t *testing.T) {
 
 	{
 		want := "ERROR"
-		_, _, err := rPackets.ReadColumns()
-		got := err.Error()
+		_, _, myerr, _ := rPackets.ReadColumns()
+		got := myerr.Error()
 		assert.Equal(t, want, got)
 	}
 }
@@ -311,7 +311,8 @@ func TestPacketsColumnsError(t *testing.T) {
 
 	{
 		want := "EOF"
-		_, _, err := rPackets.ReadColumns()
+		_, _, myerr, err := rPackets.ReadColumns()
+		assert.Nil(t, myerr)
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}

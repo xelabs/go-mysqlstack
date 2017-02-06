@@ -11,56 +11,17 @@ package driver
 
 import (
 	"fmt"
-	"strings"
+	"sync"
 	"testing"
 
+	"github.com/XeLabs/go-mysqlstack/xlog"
 	"github.com/stretchr/testify/assert"
 
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
-type testHandler struct {
-	authDeny bool
-	qr       *sqltypes.Result
-}
-
-func newTestHandler() *testHandler {
-	return &testHandler{}
-}
-
-func (th *testHandler) AuthCheck(session *Session) bool {
-	if session.Auth.User() == "mock" {
-		return true
-	}
-
-	return false
-}
-
-func (th *testHandler) ComQuery(session *Session, query string) (*sqltypes.Result, error) {
-	switch {
-	case strings.HasPrefix(query, "insert") == true:
-		return &sqltypes.Result{
-			RowsAffected: 123,
-			InsertID:     123456789,
-		}, nil
-
-	case strings.HasPrefix(query, "panic") == true:
-		panic("test.panic....")
-
-	case strings.HasPrefix(query, "error") == true:
-		return nil, NewSQLError(ERUnknownComError, SSUnknownComError, "query.error: %v", query)
-	}
-
-	return th.qr, nil
-}
-
-func (th *testHandler) setResult(r *sqltypes.Result) {
-	th.qr = r
-}
-
 func TestServer(t *testing.T) {
-	th := newTestHandler()
 	result1 := &sqltypes.Result{
 		Fields: []*querypb.Field{
 			{
@@ -85,73 +46,83 @@ func TestServer(t *testing.T) {
 	}
 	result2 := &sqltypes.Result{}
 
-	th.setResult(result1)
-
-	address := fmt.Sprintf(":%d", randomPort(8000, 9000))
-	server, err := NewListener(address, th)
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	port, svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
-
-	go func() {
-		server.Accept()
-	}()
+	defer svr.Close()
+	address := fmt.Sprintf(":%v", port)
 
 	// query
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		_, err = client.Query("select")
+		defer client.Close()
+
+		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		_, err = client.Query("SELECT1")
 		assert.Nil(t, err)
-		client.Close()
 	}
 
 	// query1
 	{
-		th.setResult(result2)
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		_, err = client.Query("select")
+
+		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		_, err = client.Query("SELECT2")
 		assert.Nil(t, err)
 		client.Close()
-		th.setResult(result1)
 	}
 
 	// exec
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		err = client.Exec("exec")
+		defer client.Close()
+
+		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		err = client.Exec("SELECT1")
 		assert.Nil(t, err)
-		client.Close()
 	}
 
 	// fetch all
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		results, err := client.FetchAll("select", -1)
+		defer client.Close()
+
+		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		r, err := client.FetchAll("SELECT1", -1)
 		assert.Nil(t, err)
-		assert.Equal(t, result1, results)
-		client.Close()
+		assert.Equal(t, result1, r)
 	}
 
 	// fetch one
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		results, err := client.FetchAll("select", 1)
+
+		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		r, err := client.FetchAll("SELECT1", 1)
 		assert.Nil(t, err)
+		defer client.Close()
+
 		want := 1
-		got := len(results.Rows)
+		got := len(r.Rows)
 		assert.Equal(t, want, got)
-		client.Close()
 	}
 
 	// error
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		err = client.Exec("error")
-		want := "query.error: error"
+		defer client.Close()
+
+		th.SetCond(&Cond{Query: "ERROR1", Error: NewSQLError(ERUnknownComError, SSUnknownComError, "query.error")})
+		err = client.Exec("ERROR1")
+		assert.NotNil(t, err)
+		want := "query.error"
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
@@ -160,7 +131,11 @@ func TestServer(t *testing.T) {
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		client.Exec("panic")
+		defer client.Close()
+
+		th.SetCond(&Cond{Query: "PANIC", Panic: true})
+		client.Exec("PANIC")
+
 		want := true
 		got := client.Closed()
 		assert.Equal(t, want, got)
@@ -188,5 +163,64 @@ func TestServer(t *testing.T) {
 		want := "Access denied for user 'mockx'"
 		got := err.Error()
 		assert.Equal(t, want, got)
+	}
+}
+
+func TestServerSessionClose(t *testing.T) {
+	result2 := &sqltypes.Result{}
+
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	port, _, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	address := fmt.Sprintf(":%v", port)
+
+	{
+		// create session 1
+		client1, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+
+		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		r, err := client1.FetchAll("SELECT2", -1)
+		assert.Nil(t, err)
+		assert.Equal(t, result2, r)
+
+		// kill session 1
+		client2, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+		_, err = client2.Query("KILL 1")
+		assert.Nil(t, err)
+	}
+}
+
+func TestServerSessionKilled(t *testing.T) {
+	result2 := &sqltypes.Result{}
+
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	port, _, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	address := fmt.Sprintf(":%v", port)
+
+	{
+		// create session 1
+		client1, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+
+		var wg sync.WaitGroup
+		th.SetCond(&Cond{Query: "SELECT2", Result: result2, Delay: 10})
+		wg.Add(1)
+		go func() {
+			_, err := client1.FetchAll("SELECT2", -1)
+			assert.NotNil(t, err)
+			wg.Done()
+		}()
+
+		// kill session 1
+		client2, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+		_, err = client2.Query("KILL 1")
+		assert.Nil(t, err)
+		wg.Wait()
 	}
 }

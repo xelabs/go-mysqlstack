@@ -17,10 +17,10 @@ import (
 
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/XeLabs/go-mysqlstack/xlog"
 )
 
 func TestRows(t *testing.T) {
-	th := newTestHandler()
 	result1 := &sqltypes.Result{
 		Fields: []*querypb.Field{
 			{
@@ -48,22 +48,21 @@ func TestRows(t *testing.T) {
 		InsertID:     123456789,
 	}
 
-	address := fmt.Sprintf(":%d", randomPort(8000, 9000))
-	server, err := NewListener(address, th)
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	port, svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
-
-	go func() {
-		server.Accept()
-	}()
+	defer svr.Close()
+	address := fmt.Sprintf(":%v", port)
 
 	// query
 	{
-		th.setResult(result2)
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
 		defer client.Close()
 
-		rows, err := client.Query("select")
+		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		rows, err := client.Query("SELECT2")
 		assert.Nil(t, err)
 
 		assert.Equal(t, uint64(123), rows.RowsAffected())
@@ -72,12 +71,12 @@ func TestRows(t *testing.T) {
 
 	// query
 	{
-		th.setResult(result1)
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
 		defer client.Close()
 
-		rows, err := client.Query("select")
+		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		rows, err := client.Query("SELECT1")
 		assert.Nil(t, err)
 		assert.Equal(t, result1.Fields, rows.Fields())
 		for rows.Next() {

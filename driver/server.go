@@ -10,25 +10,38 @@
 package driver
 
 import (
-	"fmt"
 	"net"
 	"runtime"
 	"strings"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/consts"
-	"github.com/XeLabs/go-mysqlstack/packet"
-	"github.com/XeLabs/go-mysqlstack/proto"
+	"github.com/XeLabs/go-mysqlstack/xlog"
 
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 type Handler interface {
+	// Register session.
+	Register(session *Session)
+
+	// UnRegister session, used when session exit.
+	UnRegister(session *Session)
+
+	// Check the client ip.
+	IPCheck(ip string) bool
+
+	// Check the Auth request.
 	AuthCheck(session *Session) bool
+
+	// Handle the queries.
 	ComQuery(session *Session, query string) (*sqltypes.Result, error)
 }
 
 type Listener struct {
+	// Logger.
+	log *xlog.Log
+
 	// Query handler.
 	handler Handler
 
@@ -36,7 +49,7 @@ type Listener struct {
 	listener net.Listener
 
 	// Incrementing ID for connection id.
-	connectionID uint64
+	connectionID uint32
 
 	// sessions maps all sessions.
 	sessions map[uint64]*Session
@@ -46,13 +59,14 @@ type Listener struct {
 }
 
 // NewListener creates a new Listener.
-func NewListener(address string, handler Handler) (*Listener, error) {
+func NewListener(log *xlog.Log, address string, handler Handler) (*Listener, error) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Listener{
+		log:          log,
 		PasswordMap:  make(map[string]string),
 		sessions:     make(map[uint64]*Session),
 		handler:      handler,
@@ -78,30 +92,40 @@ func (l *Listener) Accept() {
 }
 
 // handle is called in a go routine for each client connection.
-func (l *Listener) handle(conn net.Conn, ID uint64) {
+func (l *Listener) handle(conn net.Conn, ID uint32) {
 	var err error
 	var data []byte
 	var authPkt []byte
 	var greetingPkt []byte
 
-	// session
-	session := NewSession(conn)
+	addr := conn.RemoteAddr().String()
+	if !l.handler.IPCheck(addr) {
+		l.log.Warning("ip[%v].check.failed", ID, addr)
+		return
+	}
+
+	session := NewSession(ID, conn)
+	l.handler.Register(session)
 
 	// Catch panics, and close the connection in any case.
 	defer func() {
-		if x := recover(); x != nil {
-			fmt.Sprintf("mysql_server caught panic:\n%v\n", x)
-		}
+		l.log.Warning("session[%v].client[%v].exit.error[%+v]...", ID, addr, err)
 		conn.Close()
+		l.handler.UnRegister(session)
+		if x := recover(); x != nil {
+			buf := make([]byte, 1024)
+			buf = buf[:runtime.Stack(buf, false)]
+			l.log.Error("server.handle.panic:%v\n%s", x, buf)
+		}
 	}()
 
-	// greeting packet
+	// greeting packet.
 	greetingPkt = session.Greeting.Pack()
 	if err = session.Packets.Write(greetingPkt); err != nil {
 		return
 	}
 
-	// auth packet
+	// auth packet.
 	if authPkt, err = session.Packets.Next(); err != nil {
 		return
 	}
@@ -109,8 +133,9 @@ func (l *Listener) handle(conn net.Conn, ID uint64) {
 		return
 	}
 
-	//  auth check
+	//  auth check.
 	if !l.handler.AuthCheck(session) {
+		l.log.Warning("session.user[%+v].auth.check.failed", session.Auth.User())
 		session.Packets.WriteERR(ERAccessDeniedError, SSAccessDeniedError, "Access denied for user '%v'", session.Auth.User())
 		return
 	} else {
@@ -120,14 +145,16 @@ func (l *Listener) handle(conn net.Conn, ID uint64) {
 	}
 
 	for {
-		// reset packet sequence ID
+		// reset packet sequence ID.
 		session.Packets.ResetSeq()
 		if data, err = session.Packets.Next(); err != nil {
+			l.log.Error("session[%v].read.next:%+v", ID, err)
 			return
 		}
 
 		switch data[0] {
 		case consts.COM_QUIT:
+			l.log.Debug("session[%v].com.quit", ID)
 			return
 		case consts.COM_INIT_DB:
 			session.Schema = string(data[1:])
@@ -138,7 +165,9 @@ func (l *Listener) handle(conn net.Conn, ID uint64) {
 			var result *sqltypes.Result
 			query := strings.TrimRight(common.BytesToString(data[1:]), ";")
 			if result, err = l.handler.ComQuery(session, query); err != nil {
+				l.log.Error("session[%v].query.error:%+v", ID, err)
 				if werr := session.writeErrFromError(err); werr != nil {
+					err = werr
 					return
 				}
 				continue
@@ -151,74 +180,17 @@ func (l *Listener) handle(conn net.Conn, ID uint64) {
 				return
 			}
 		default:
+			l.log.Error("session.command:%v.not.implemented:%+v", data[0])
 			if err = session.Packets.WriteERR(ERUnknownComError, SSUnknownComError, "command handling not implemented yet: %v", data[0]); err != nil {
 				return
 			}
 		}
-		// reset packet sequence ID
+		// reset packet sequence ID.
 		session.Packets.ResetSeq()
 	}
 }
 
-type Session struct {
-	Schema   string
-	Auth     *proto.Auth
-	Packets  *packet.Packets
-	Greeting *proto.Greeting
-}
-
-func NewSession(conn net.Conn) *Session {
-	return &Session{
-		Auth:     proto.NewAuth(),
-		Greeting: proto.NewGreeting(0),
-		Packets:  packet.NewPackets(conn),
-	}
-}
-
-func (s *Session) writeErrFromError(err error) error {
-	if se, ok := err.(*SQLError); ok {
-		return s.Packets.WriteERR(uint16(se.Num), se.State, "%v", se.Message)
-	}
-
-	return s.Packets.WriteERR(ERUnknownError, SSSignalException, "unknown error: %v", err)
-}
-
-func (s *Session) writeResult(result *sqltypes.Result) error {
-	if len(result.Fields) == 0 {
-		// This is just an INSERT result, send an OK packet.
-		return s.Packets.WriteOK(result.RowsAffected, result.InsertID, s.Greeting.Status(), 0)
-	}
-
-	// 1. Write columns
-	if err := s.Packets.WriteColumns(result.Fields); err != nil {
-		return err
-	}
-
-	// 2. Append rows
-	batch := common.NewBuffer(64)
-	for _, row := range result.Rows {
-		rowBuf := common.NewBuffer(16)
-		for _, val := range row {
-			if val.IsNull() {
-				rowBuf.WriteLenEncodeNUL()
-			} else {
-				rowBuf.WriteLenEncodeBytes(val.Raw())
-			}
-		}
-		if err := s.Packets.Append(batch, rowBuf.Datas()); err != nil {
-			return err
-		}
-	}
-
-	// 3. Write EOF
-	if err := s.Packets.AppendEOF(batch); err != nil {
-		return err
-	}
-
-	// 4. Write to stream
-	if err := s.Packets.Flush(batch.Datas()); err != nil {
-		return err
-	}
-
-	return nil
+// Close close the listener and all connections.
+func (l *Listener) Close() {
+	l.listener.Close()
 }
