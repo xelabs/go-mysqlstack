@@ -90,7 +90,7 @@ func TestGreetingUnPackError(t *testing.T) {
 		buff.WriteZero(1)
 	}
 
-	capability := DefaultCapability
+	capability := DefaultServerCapability
 	capLower := uint16(capability)
 	capUpper := uint16(uint32(capability) >> 16)
 

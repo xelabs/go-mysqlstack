@@ -24,7 +24,10 @@ import (
 // 3. read checks
 func TestStream(t *testing.T) {
 	rBuf := NewMockConn()
+	defer rBuf.Close()
+
 	wBuf := NewMockConn()
+	defer wBuf.Close()
 
 	rStream := NewStream(rBuf, PACKET_MAX_SIZE)
 	wStream := NewStream(wBuf, PACKET_MAX_SIZE)
@@ -69,10 +72,13 @@ func TestStream(t *testing.T) {
 // 2. read checks
 // 3. write checks
 func TestStreamWriteMax(t *testing.T) {
-	pktMaxSize := 64
 	rBuf := NewMockConn()
-	wBuf := NewMockConn()
+	defer rBuf.Close()
 
+	wBuf := NewMockConn()
+	defer wBuf.Close()
+
+	pktMaxSize := 64
 	rStream := NewStream(rBuf, pktMaxSize)
 	wStream := NewStream(wBuf, pktMaxSize)
 
@@ -137,10 +143,13 @@ func TestStreamWriteMax(t *testing.T) {
 // 2. read checks
 // 3. write checks
 func TestStreamWriteOverMax(t *testing.T) {
-	pktMaxSize := 63
 	rBuf := NewMockConn()
-	wBuf := NewMockConn()
+	defer rBuf.Close()
 
+	wBuf := NewMockConn()
+	defer wBuf.Close()
+
+	pktMaxSize := 63
 	rStream := NewStream(rBuf, pktMaxSize)
 	wStream := NewStream(wBuf, pktMaxSize)
 

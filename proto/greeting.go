@@ -42,7 +42,7 @@ func NewGreeting(connectionID uint32) *Greeting {
 		protocolVersion: 10,
 		serverVersion:   "Radon 5.7",
 		ConnectionID:    connectionID,
-		Capability:      DefaultCapability,
+		Capability:      DefaultServerCapability,
 		Charset:         consts.CHARSET_UTF8,
 		status:          consts.SERVER_STATUS_AUTOCOMMIT,
 		Salt:            make([]byte, 20),

@@ -39,6 +39,9 @@ func TestClient(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
+		// connection ID
+		assert.Equal(t, uint32(1), client.ConnectionID())
+
 		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
 		rows, err := client.Query("SELECT2")
 		assert.Nil(t, err)

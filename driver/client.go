@@ -103,7 +103,7 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 	{
 		// auth pack
 		payload := c.auth.Pack(
-			c.greeting.Capability,
+			proto.DefaultClientCapability,
 			c.greeting.Charset,
 			username,
 			password,

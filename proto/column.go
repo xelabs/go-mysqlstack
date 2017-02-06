@@ -93,14 +93,14 @@ func UnpackColumn(payload []byte) (field *querypb.Field, err error) {
 		return
 	}
 
-	//1 Decimals
+	// 1 Decimals
 	decimals, err := buff.ReadU8()
 	if err != nil {
 		return
 	}
 	field.Decimals = uint32(decimals)
 
-	//2 Filler and Default Values is ignored
+	// 2 Filler and Default Values is ignored
 
 	return
 }

@@ -11,6 +11,7 @@ package packet
 
 import (
 	"testing"
+	"time"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/proto"
@@ -22,6 +23,8 @@ import (
 
 func TestPacketsNext(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	packets := NewPackets(conn)
 	data := []byte{0x01, 0x02, 0x03}
 
@@ -76,6 +79,8 @@ func TestPacketsNext(t *testing.T) {
 
 func TestPacketsNextFail(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	packets := NewPackets(conn)
 	data1 := []byte{0x00, 0x00, 0x00}
 	data2 := []byte{0x00, 0x00, 0x00, 0x00}
@@ -102,6 +107,8 @@ func TestPacketsNextFail(t *testing.T) {
 
 func TestPacketsWrite(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	buff := common.NewBuffer(64)
 	packets := NewPackets(conn)
 	data := []byte{0x01, 0x02, 0x03}
@@ -133,6 +140,8 @@ func TestPacketsWrite(t *testing.T) {
 
 func TestPacketsBatchWrite(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	buff := common.NewBuffer(64)
 	batch := common.NewBuffer(64)
 	packets := NewPackets(conn)
@@ -174,8 +183,10 @@ func TestPacketsBatchWrite(t *testing.T) {
 }
 
 func TestPacketsWriteCommand(t *testing.T) {
-	buff := common.NewBuffer(64)
 	conn := NewMockConn()
+	defer conn.Close()
+
+	buff := common.NewBuffer(64)
 	packets := NewPackets(conn)
 	cmd := 0x03
 	data := []byte{0x01, 0x02, 0x03}
@@ -196,6 +207,8 @@ func TestPacketsWriteCommand(t *testing.T) {
 
 func TestPacketsColumns(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	wPackets := NewPackets(conn)
 	rPackets := NewPackets(conn)
 	columns := []*querypb.Field{
@@ -237,6 +250,8 @@ func TestPacketsColumns(t *testing.T) {
 
 func TestPacketsColumnsOK(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	wPackets := NewPackets(conn)
 	rPackets := NewPackets(conn)
 	{
@@ -271,6 +286,8 @@ func TestPacketsColumnsOK(t *testing.T) {
 
 func TestPacketsColumnsERR(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	wPackets := NewPackets(conn)
 	rPackets := NewPackets(conn)
 	{
@@ -298,6 +315,8 @@ func TestPacketsColumnsERR(t *testing.T) {
 
 func TestPacketsColumnsError(t *testing.T) {
 	conn := NewMockConn()
+	defer conn.Close()
+
 	wPackets := NewPackets(conn)
 	rPackets := NewPackets(conn)
 	{
@@ -316,4 +335,30 @@ func TestPacketsColumnsError(t *testing.T) {
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
+}
+
+func TestPacketsWriteOK(t *testing.T) {
+	conn := NewMockConn()
+	defer conn.Close()
+
+	wPackets := NewPackets(conn)
+	err := wPackets.WriteOK(1, 1, 1, 1)
+	assert.Nil(t, err)
+
+	conn.Datas()
+	conn.LocalAddr()
+	conn.RemoteAddr()
+	conn.SetDeadline(time.Now())
+	conn.SetReadDeadline(time.Now())
+	conn.SetWriteDeadline(time.Now())
+
+}
+
+func TestPacketsWriteError(t *testing.T) {
+	conn := NewMockConn()
+	defer conn.Close()
+
+	wPackets := NewPackets(conn)
+	err := wPackets.WriteERR(1, "YH000", "err:%v", "unknow")
+	assert.Nil(t, err)
 }

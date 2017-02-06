@@ -10,9 +10,11 @@
 package proto
 
 import (
+	"testing"
+
+	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/consts"
 	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestAuth(t *testing.T) {
@@ -85,7 +87,8 @@ func TestAuthUnPack(t *testing.T) {
 	want := NewAuth()
 	want.charset = 0x02
 	want.authResponseLen = 20
-	want.clientFlags = DefaultCapability
+	want.clientFlags = DefaultClientCapability
+	want.clientFlags |= consts.CLIENT_CONNECT_WITH_DB
 	want.authResponse = nativePassword("sbtest", DefaultSalt)
 	want.database = "sbtest"
 	want.user = "sbtest"
@@ -93,7 +96,7 @@ func TestAuthUnPack(t *testing.T) {
 
 	got := NewAuth()
 	err := got.UnPack(want.Pack(
-		DefaultCapability,
+		DefaultClientCapability,
 		0x02,
 		"sbtest",
 		"sbtest",
@@ -108,7 +111,8 @@ func TestAuthWithoutPWD(t *testing.T) {
 	want := NewAuth()
 	want.charset = 0x02
 	want.authResponseLen = 1
-	want.clientFlags = DefaultCapability
+	want.clientFlags = DefaultClientCapability
+	want.clientFlags |= consts.CLIENT_CONNECT_WITH_DB
 	want.authResponse = nativePassword("", DefaultSalt)
 	want.database = "sbtest"
 	want.user = "sbtest"
@@ -116,7 +120,7 @@ func TestAuthWithoutPWD(t *testing.T) {
 
 	got := NewAuth()
 	err := got.UnPack(want.Pack(
-		DefaultCapability,
+		DefaultClientCapability,
 		0x02,
 		"sbtest",
 		"",
@@ -131,14 +135,14 @@ func TestAuthWithoutDB(t *testing.T) {
 	want := NewAuth()
 	want.charset = 0x02
 	want.authResponseLen = 20
-	want.clientFlags = DefaultCapability &^ consts.CLIENT_CONNECT_WITH_DB
+	want.clientFlags = DefaultClientCapability
 	want.authResponse = nativePassword("sbtest", DefaultSalt)
 	want.user = "sbtest"
 	want.pluginName = DefaultAuthPluginName
 
 	got := NewAuth()
 	err := got.UnPack(want.Pack(
-		DefaultCapability,
+		DefaultClientCapability,
 		0x02,
 		"sbtest",
 		"sbtest",
@@ -153,7 +157,8 @@ func TestAuthWithoutSecure(t *testing.T) {
 	want := NewAuth()
 	want.charset = 0x02
 	want.authResponseLen = 20
-	want.clientFlags = DefaultCapability &^ consts.CLIENT_SECURE_CONNECTION &^ consts.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+	want.clientFlags = DefaultClientCapability &^ consts.CLIENT_SECURE_CONNECTION &^ consts.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+	want.clientFlags |= consts.CLIENT_CONNECT_WITH_DB
 	want.authResponse = nativePassword("sbtest", DefaultSalt)
 	want.user = "sbtest"
 	want.database = "sbtest"
@@ -161,7 +166,7 @@ func TestAuthWithoutSecure(t *testing.T) {
 
 	got := NewAuth()
 	err := got.UnPack(want.Pack(
-		DefaultCapability&^consts.CLIENT_SECURE_CONNECTION,
+		DefaultClientCapability&^consts.CLIENT_SECURE_CONNECTION,
 		0x02,
 		"sbtest",
 		"sbtest",
@@ -171,4 +176,68 @@ func TestAuthWithoutSecure(t *testing.T) {
 	got.authResponseLen = 20
 	assert.Nil(t, err)
 	assert.Equal(t, want, got)
+}
+
+func TestAuthUnPackError(t *testing.T) {
+	capabilityFlags := DefaultClientCapability
+	capabilityFlags |= consts.CLIENT_PROTOCOL_41
+	capabilityFlags |= consts.CLIENT_CONNECT_WITH_DB
+
+	// NULL
+	f0 := func(buff *common.Buffer) {
+	}
+
+	// Write clientFlags.
+	f1 := func(buff *common.Buffer) {
+		buff.WriteU32(capabilityFlags)
+	}
+
+	// Write maxPacketSize.
+	f2 := func(buff *common.Buffer) {
+		buff.WriteU32(uint32(16777216))
+	}
+
+	// Write charset.
+	f3 := func(buff *common.Buffer) {
+		buff.WriteU8(0x01)
+	}
+
+	// Write 23 NULLs.
+	f4 := func(buff *common.Buffer) {
+		buff.WriteZero(23)
+	}
+
+	// Write username.
+	f5 := func(buff *common.Buffer) {
+		buff.WriteString("mock")
+		buff.WriteZero(1)
+	}
+
+	// Write auth-response.
+	f6 := func(buff *common.Buffer) {
+		authRsp := make([]byte, 8)
+		buff.WriteU8(8)
+		buff.WriteBytes(authRsp)
+	}
+
+	// Write database.
+	f7 := func(buff *common.Buffer) {
+		buff.WriteString("db1")
+		buff.WriteZero(1)
+	}
+
+	buff := common.NewBuffer(32)
+	fs := []func(buff *common.Buffer){f0, f1, f2, f3, f4, f5, f6, f7}
+	for i := 0; i < len(fs); i++ {
+		auth := NewAuth()
+		err := auth.UnPack(buff.Datas())
+		assert.NotNil(t, err)
+		fs[i](buff)
+	}
+
+	{
+		auth := NewAuth()
+		err := auth.UnPack(buff.Datas())
+		assert.NotNil(t, err)
+	}
 }
