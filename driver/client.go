@@ -13,10 +13,9 @@ import (
 	"net"
 
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
 	"github.com/XeLabs/go-mysqlstack/packet"
 	"github.com/XeLabs/go-mysqlstack/proto"
-	"github.com/pkg/errors"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
@@ -48,13 +47,8 @@ type conn struct {
 
 func (c *conn) handleErrorPacket(data []byte) error {
 	if data[0] == proto.ERR_PACKET {
-		pkt, e := c.packets.ParseERR(data)
-		if e != nil {
-			return e
-		}
-		return errors.New(pkt.ErrorMessage)
+		return c.packets.ParseERR(data)
 	}
-
 	return nil
 }
 
@@ -63,7 +57,7 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 
 	c = &conn{}
 	if c.netConn, err = net.Dial("tcp", address); err != nil {
-		return nil, errors.WithStack(err)
+		return
 	}
 
 	defer func() {
@@ -76,8 +70,8 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 	c.greeting = proto.NewGreeting(0)
 	c.packets = packet.NewPackets(c.netConn)
 
+	//Parses the initial handshake from the server.
 	{
-
 		// greeting read
 		if payload, err = c.packets.Next(); err != nil {
 			return
@@ -94,8 +88,8 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 		}
 
 		// check greating Capability
-		if c.greeting.Capability&consts.CLIENT_PROTOCOL_41 == 0 {
-			err = errors.New("cannot.connect.to.servers.earlier.than.4.1")
+		if c.greeting.Capability&sqldb.CLIENT_PROTOCOL_41 == 0 {
+			err = sqldb.NewSQLError(sqldb.CR_VERSION_ERROR, "cannot connect to servers earlier than 4.1")
 			return
 		}
 	}
@@ -173,11 +167,11 @@ func (c *conn) ConnectionID() uint32 {
 
 // Query execute the query and return the row iterator
 func (c *conn) Query(sql string) (Rows, error) {
-	return c.query(consts.COM_QUERY, sql)
+	return c.query(sqldb.COM_QUERY, sql)
 }
 
 func (c *conn) Ping() error {
-	rows, err := c.query(consts.COM_PING, "")
+	rows, err := c.query(sqldb.COM_PING, "")
 	if err != nil {
 		return err
 	}
@@ -190,7 +184,7 @@ func (c *conn) Ping() error {
 }
 
 func (c *conn) InitDB(db string) error {
-	rows, err := c.query(consts.COM_INIT_DB, db)
+	rows, err := c.query(sqldb.COM_INIT_DB, db)
 	if err != nil {
 		return err
 	}
@@ -204,7 +198,7 @@ func (c *conn) InitDB(db string) error {
 
 // Exec executes the query and drain the results
 func (c *conn) Exec(sql string) error {
-	rows, err := c.query(consts.COM_QUERY, sql)
+	rows, err := c.query(sqldb.COM_QUERY, sql)
 	if err != nil {
 		return err
 	}
@@ -219,7 +213,7 @@ func (c *conn) Exec(sql string) error {
 func (c *conn) FetchAll(sql string, maxrows int) (*sqltypes.Result, error) {
 	var r *sqltypes.Result
 
-	rows, err := c.query(consts.COM_QUERY, sql)
+	rows, err := c.query(sqldb.COM_QUERY, sql)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +259,7 @@ func (c *conn) Cleanup() {
 // Close closes the connection
 func (c *conn) Close() error {
 	if c.netConn != nil {
-		if err := c.packets.WriteCommand(consts.COM_QUIT, nil); err != nil {
+		if err := c.packets.WriteCommand(sqldb.COM_QUIT, nil); err != nil {
 			return err
 		}
 		c.Cleanup()

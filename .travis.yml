@@ -4,7 +4,6 @@ go:
   - 1.6
 
 before_install:
-  - go get github.com/pkg/errors
   - go get github.com/pierrre/gotestcover
   - go get github.com/stretchr/testify/assert
 

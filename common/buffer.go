@@ -11,12 +11,11 @@ package common
 
 import (
 	"bytes"
-	"github.com/pkg/errors"
 	"io"
 )
 
 var (
-	ErrIOEOF = errors.WithStack(io.EOF)
+	ErrIOEOF = io.EOF
 )
 
 type Buffer struct {
@@ -399,6 +398,10 @@ func (b *Buffer) WriteBytes(bs []byte) {
 }
 
 func (b *Buffer) ReadBytes(n int) (v []byte, err error) {
+	if n == 0 {
+		return nil, nil
+	}
+
 	if (b.seek + n) > b.pos {
 		err = ErrIOEOF
 		return

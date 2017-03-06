@@ -287,6 +287,10 @@ var Type_value = map[string]int32{
 	"JSON":      2078,
 }
 
+func (x Type) String() string {
+	return Type_name[int32(x)]
+}
+
 // EventToken is a structure that describes a point in time in a
 // replication stream on one shard. The most recent known replication
 // position can be retrieved from vttablet when executing a query. It

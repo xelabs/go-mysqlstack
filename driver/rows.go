@@ -10,9 +10,10 @@
 package driver
 
 import (
+	"errors"
+
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/proto"
-	"github.com/pkg/errors"
 
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
@@ -77,10 +78,7 @@ func (r *TextRows) Next() bool {
 		return false
 
 	case proto.ERR_PACKET:
-		e, ierr := proto.UnPackERR(r.payload)
-		if ierr != nil {
-			r.err = errors.Errorf("rows.next.error:%v", e.ErrorMessage)
-		}
+		r.err = proto.UnPackERR(r.payload)
 		r.end = true
 		return false
 	}

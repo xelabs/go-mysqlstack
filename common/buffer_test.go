@@ -463,3 +463,14 @@ func TestBufferNUL(t *testing.T) {
 		assert.Nil(t, got)
 	}
 }
+
+func TestWriteBytesNil(t *testing.T) {
+	writer := NewBuffer(6)
+
+	{
+		writer.WriteBytes(nil)
+		reader := ReadBuffer(writer.Datas())
+		got, _ := reader.ReadBytes(0)
+		assert.Nil(t, got)
+	}
+}

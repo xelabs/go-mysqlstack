@@ -2,50 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package driver
+package sqldb
 
 import (
 	"bytes"
 	"fmt"
 	"regexp"
 	"strconv"
-)
-
-// Error codes for server-side errors.
-// Originally found in include/mysql/mysqld_error.h
-const (
-	// ERAccessDeniedError is ER_ACCESS_DENIED_ERROR
-	ERAccessDeniedError = 1045
-
-	// ERUnknownComError is ER_UNKNOWN_COM_ERROR
-	ERUnknownComError = 1047
-
-	// ERUnknownError is ER_UNKNOWN_ERROR
-	ERUnknownError = 1105
-
-	// ERCantDoThisDuringAnTransaction is
-	// ER_CANT_DO_THIS_DURING_AN_TRANSACTION
-	ERCantDoThisDuringAnTransaction = 1179
-)
-
-// Sql states for errors.
-// Originally found in include/mysql/sql_state.h
-const (
-	// SSSignalException is ER_SIGNAL_EXCEPTION
-	SSSignalException = "HY000"
-
-	// SSAccessDeniedError is ER_ACCESS_DENIED_ERROR
-	SSAccessDeniedError = "28000"
-
-	// SSUnknownComError is ER_UNKNOWN_COM_ERROR
-	SSUnknownComError = "08S01"
-
-	// SSHandshakeError is ER_HANDSHAKE_ERROR
-	SSHandshakeError = "08S01"
-
-	// SSCantDoThisDuringAnTransaction is
-	// ER_CANT_DO_THIS_DURING_AN_TRANSACTION
-	SSCantDoThisDuringAnTransaction = "25000"
 )
 
 const (
@@ -55,21 +18,36 @@ const (
 
 // SQLError is the error structure returned from calling a db library function
 type SQLError struct {
-	Num     int
+	Num     uint16
 	State   string
 	Message string
 	Query   string
 }
 
-// NewSQLError creates a new SQLError.
-// If sqlState is left empty, it will default to "HY000" (general error).
-func NewSQLError(number int, sqlState string, format string, args ...interface{}) *SQLError {
-	if sqlState == "" {
-		sqlState = SQLStateGeneral
+func NewSQLError(number uint16, format string, args ...interface{}) *SQLError {
+	sqlErr := &SQLError{}
+	err, ok := SQLErrors[number]
+	if !ok {
+		unknow := SQLErrors[ER_UNKNOWN_ERROR]
+		sqlErr.Num = unknow.Num
+		sqlErr.State = unknow.State
+	} else {
+		sqlErr.Num = err.Num
+		sqlErr.State = err.State
 	}
+
+	if format != "" {
+		sqlErr.Message = fmt.Sprintf(format, args...)
+	} else {
+		sqlErr.Message = fmt.Sprintf(err.Message, args...)
+	}
+	return sqlErr
+}
+
+func NewSQLError1(number uint16, state string, format string, args ...interface{}) *SQLError {
 	return &SQLError{
 		Num:     number,
-		State:   sqlState,
+		State:   state,
 		Message: fmt.Sprintf(format, args...),
 	}
 }
@@ -89,16 +67,6 @@ func (se *SQLError) Error() string {
 		fmt.Fprintf(buf, " during query: %s", se.Query)
 	}
 	return buf.String()
-}
-
-// Number returns the internal MySQL error code.
-func (se *SQLError) Number() int {
-	return se.Num
-}
-
-// SQLState returns the SQLSTATE value.
-func (se *SQLError) SQLState() string {
-	return se.State
 }
 
 var errExtract = regexp.MustCompile(`.*\(errno ([0-9]*)\) \(sqlstate ([0-9a-zA-Z]{5})\).*`)
@@ -123,24 +91,26 @@ func NewSQLErrorFromError(err error) error {
 
 		// FIXME(alainjobart): 1105 is unknown error. Will
 		// merge with sqlconn later.
+		unknow := SQLErrors[ER_UNKNOWN_ERROR]
 		return &SQLError{
-			Num:     1105,
-			State:   SQLStateGeneral,
+			Num:     unknow.Num,
+			State:   unknow.State,
 			Message: msg,
 		}
 	}
 
 	num, err := strconv.Atoi(match[1])
 	if err != nil {
+		unknow := SQLErrors[ER_UNKNOWN_ERROR]
 		return &SQLError{
-			Num:     1105,
-			State:   SQLStateGeneral,
+			Num:     unknow.Num,
+			State:   unknow.State,
 			Message: msg,
 		}
 	}
 
 	serr := &SQLError{
-		Num:     num,
+		Num:     uint16(num),
 		State:   match[2],
 		Message: msg,
 	}

@@ -15,7 +15,7 @@ import (
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/proto"
-	"github.com/pkg/errors"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
@@ -44,13 +44,11 @@ func NewPackets(rw io.ReadWriter) *Packets {
 func (p *Packets) Next() (v []byte, e error) {
 	pkt, err := p.stream.Read()
 	if err != nil {
-		e = err
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_UNKNOWN_ERROR, "server maybe lost, error %v", err)
 	}
 
 	if pkt.SequenceID != p.seq {
-		e = errors.Errorf("pkt.read.seq[%v]!=pkt.actual.seq[%v]", pkt.SequenceID, p.seq)
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "pkt.read.seq[%v]!=pkt.actual.seq[%v]", pkt.SequenceID, p.seq)
 	}
 	p.seq++
 
@@ -145,7 +143,7 @@ func (p *Packets) ResetSeq() {
 	p.seq = 0
 }
 
-func (p *Packets) ParseERR(data []byte) (*proto.ERR, error) {
+func (p *Packets) ParseERR(data []byte) error {
 	return proto.UnPackERR(data)
 }
 
@@ -155,95 +153,91 @@ func (p *Packets) ParseOK(data []byte) (*proto.OK, error) {
 
 // ReadColumns parses columns info
 // http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::Resultset
-func (p *Packets) ReadColumns() (columns []*querypb.Field, ok *proto.OK, myerr error, err error) {
+// If myerr is not nil, we dont close the connection.
+// if err is not nil, we(the client) will close the connection.
+func (p *Packets) ReadColumns() ([]*querypb.Field, *proto.OK, error, error) {
+	var err error
 	var count uint64
 	var payload []byte
-	var pkt *proto.ERR
 
 	if payload, err = p.Next(); err != nil {
-		return
+		return nil, nil, nil, err
 	}
 
-	ok = &proto.OK{}
+	ok := &proto.OK{}
 	switch payload[0] {
 	case proto.OK_PACKET:
 		// maybe we are OK response, such as Exec response
 		if ok, err = p.ParseOK(payload); err != nil {
-			return
+			return nil, nil, nil, err
 		}
-		return
+		return nil, ok, nil, nil
 
 	case proto.ERR_PACKET:
-		if pkt, err = p.ParseERR(payload); err != nil {
-			return
-		}
-		myerr = errors.New(pkt.ErrorMessage)
-		return
+		return nil, nil, p.ParseERR(payload), nil
 	}
 
 	// column count
 	if count, err = proto.ColumnCount(payload); err != nil {
-		return
+		return nil, nil, nil, err
 	}
 
 	// column info
-	columns = make([]*querypb.Field, 0, count)
+	columns := make([]*querypb.Field, 0, count)
 	for i := 0; i < int(count); i++ {
 		if payload, err = p.Next(); err != nil {
-			return
+			return nil, nil, nil, err
 		}
 
-		column, perr := proto.UnpackColumn(payload)
-		if perr != nil {
-			err = perr
-			return
+		column, err := proto.UnpackColumn(payload)
+		if err != nil {
+			return nil, nil, nil, err
 		}
 		columns = append(columns, column)
 	}
 
 	// EOF packet
 	if payload, err = p.Next(); err != nil {
-		return
+		return nil, nil, nil, err
 	} else {
 		if payload[0] != proto.EOF_PACKET {
-			err = errors.Errorf("read.columns.EOF.error.columns[%+v]", columns)
-			return
+			return nil, nil, nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "read.columns.EOF.error.columns[%+v]", columns)
 		}
 	}
-	return
+	return columns, ok, nil, nil
 }
 
 // WriteColumns writes columns packet to stream
-func (p *Packets) WriteColumns(columns []*querypb.Field) (err error) {
+func (p *Packets) WriteColumns(columns []*querypb.Field) error {
 	batch := common.NewBuffer(128)
 
 	// column count
 	count := len(columns)
 	buf := common.NewBuffer(64)
 	buf.WriteLenEncode(uint64(count))
-	if err = p.Append(batch, buf.Datas()); err != nil {
-		return
+	if err := p.Append(batch, buf.Datas()); err != nil {
+		return err
 	}
 
 	// columns info
 	for i := 0; i < count; i++ {
 		buf := common.NewBuffer(64)
 		buf.WriteBytes(proto.PackColumn(columns[i]))
-		if err = p.Append(batch, buf.Datas()); err != nil {
-			return
+		if err := p.Append(batch, buf.Datas()); err != nil {
+			return err
 		}
 	}
 	// EOF
-	if err = p.AppendEOF(batch); err != nil {
+	if err := p.AppendEOF(batch); err != nil {
 		return err
 	}
 
 	// write to stream
-	if err = p.Flush(batch.Datas()); err != nil {
+	if err := p.Flush(batch.Datas()); err != nil {
 		return err
 	}
 
-	return
+	return nil
 }
 
 func (p *Packets) WriteOK(affectedRows, lastInsertID uint64, flags uint16, warnings uint16) error {

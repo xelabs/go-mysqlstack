@@ -15,24 +15,27 @@ import (
 	"strings"
 
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 	"github.com/XeLabs/go-mysqlstack/xlog"
 
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 type Handler interface {
-	// Register session.
-	Register(session *Session)
+	// NewSession is called when a session is coming.
+	NewSession(session *Session)
 
-	// UnRegister session, used when session exit.
-	UnRegister(session *Session)
+	// SessionClosed is called when a session exit.
+	SessionClosed(session *Session)
 
-	// Check the client ip.
-	IPCheck(ip string) bool
+	// Check the session.
+	SessionCheck(session *Session) error
 
 	// Check the Auth request.
-	AuthCheck(session *Session) bool
+	AuthCheck(session *Session) error
+
+	// Handle the cominitdb.
+	ComInitDB(session *Session, database string) error
 
 	// Handle the queries.
 	ComQuery(session *Session, query string) (*sqltypes.Result, error)
@@ -41,6 +44,8 @@ type Handler interface {
 type Listener struct {
 	// Logger.
 	log *xlog.Log
+
+	address string
 
 	// Query handler.
 	handler Handler
@@ -53,9 +58,6 @@ type Listener struct {
 
 	// sessions maps all sessions.
 	sessions map[uint64]*Session
-
-	// PasswordMap maps users to passwords.
-	PasswordMap map[string]string
 }
 
 // NewListener creates a new Listener.
@@ -67,7 +69,7 @@ func NewListener(log *xlog.Log, address string, handler Handler) (*Listener, err
 
 	return &Listener{
 		log:          log,
-		PasswordMap:  make(map[string]string),
+		address:      address,
 		sessions:     make(map[uint64]*Session),
 		handler:      handler,
 		listener:     listener,
@@ -84,11 +86,18 @@ func (l *Listener) Accept() {
 			// Close() was probably called.
 			return
 		}
-
 		ID := l.connectionID
 		l.connectionID++
 		go l.handle(conn, ID)
 	}
+}
+
+func (l *Listener) parserComInitDB(data []byte) string {
+	return string(data[1:])
+}
+
+func (l *Listener) parserComQuery(data []byte) string {
+	return strings.TrimRight(common.BytesToString(data[1:]), ";")
 }
 
 // handle is called in a go routine for each client connection.
@@ -97,46 +106,50 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 	var data []byte
 	var authPkt []byte
 	var greetingPkt []byte
-
-	addr := conn.RemoteAddr().String()
-	if !l.handler.IPCheck(addr) {
-		l.log.Warning("ip[%v].check.failed", ID, addr)
-		return
-	}
-
-	session := NewSession(ID, conn)
-	l.handler.Register(session)
+	log := l.log
 
 	// Catch panics, and close the connection in any case.
 	defer func() {
-		l.log.Warning("session[%v].client[%v].exit.error[%+v]...", ID, addr, err)
 		conn.Close()
-		l.handler.UnRegister(session)
 		if x := recover(); x != nil {
 			buf := make([]byte, 1024)
 			buf = buf[:runtime.Stack(buf, false)]
-			l.log.Error("server.handle.panic:%v\n%s", x, buf)
+			log.Error("server.handle.panic:%v\n%s", x, buf)
 		}
 	}()
-
-	// greeting packet.
-	greetingPkt = session.Greeting.Pack()
-	if err = session.Packets.Write(greetingPkt); err != nil {
+	session := newSession(ID, conn)
+	// Session check.
+	if err = l.handler.SessionCheck(session); err != nil {
+		log.Warning("session[%v].check.failed.error:%+v", ID, err)
+		session.writeErrFromError(err)
 		return
 	}
 
-	// auth packet.
+	// Session register.
+	l.handler.NewSession(session)
+	defer l.handler.SessionClosed(session)
+
+	// Greeting packet.
+	greetingPkt = session.Greeting.Pack()
+	if err = session.Packets.Write(greetingPkt); err != nil {
+		log.Error("server.write.greeting.packet.error: %v", err)
+		return
+	}
+
+	// Auth packet.
 	if authPkt, err = session.Packets.Next(); err != nil {
+		log.Error("server.read.auth.packet.error: %v", err)
 		return
 	}
 	if err = session.Auth.UnPack(authPkt); err != nil {
+		log.Error("server.unpack.auth.error: %v", err)
 		return
 	}
 
-	//  auth check.
-	if !l.handler.AuthCheck(session) {
-		l.log.Warning("session.user[%+v].auth.check.failed", session.Auth.User())
-		session.Packets.WriteERR(ERAccessDeniedError, SSAccessDeniedError, "Access denied for user '%v'", session.Auth.User())
+	//  Auth check.
+	if err = l.handler.AuthCheck(session); err != nil {
+		log.Warning("server.user[%+v].auth.check.failed", session.Auth.User())
+		session.writeErrFromError(err)
 		return
 	} else {
 		if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
@@ -144,30 +157,52 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 		}
 	}
 
+	// Check the database.
+	db := session.Auth.Database()
+	if db != "" {
+		if err = l.handler.ComInitDB(session, db); err != nil {
+			log.Error("server.cominitdb.error: %+v", err)
+			if werr := session.writeErrFromError(err); werr != nil {
+				return
+			}
+			return
+		}
+		session.Schema = db
+	}
+
 	for {
-		// reset packet sequence ID.
+		// Reset packet sequence ID.
 		session.Packets.ResetSeq()
 		if data, err = session.Packets.Next(); err != nil {
-			l.log.Error("session[%v].read.next:%+v", ID, err)
 			return
 		}
 
 		switch data[0] {
-		case consts.COM_QUIT:
-			l.log.Debug("session[%v].com.quit", ID)
+		case sqldb.COM_QUIT:
+			log.Debug("server.session[%v].com.quit", ID)
 			return
-		case consts.COM_INIT_DB:
-			session.Schema = string(data[1:])
+		case sqldb.COM_INIT_DB:
+			db := l.parserComInitDB(data)
+			if err = l.handler.ComInitDB(session, db); err != nil {
+				if werr := session.writeErrFromError(err); werr != nil {
+					return
+				}
+			} else {
+				session.Schema = db
+				if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
+					return
+				}
+			}
+		case sqldb.COM_PING:
 			if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
 				return
 			}
-		case consts.COM_QUERY:
+		case sqldb.COM_QUERY:
+			query := l.parserComQuery(data)
 			var result *sqltypes.Result
-			query := strings.TrimRight(common.BytesToString(data[1:]), ";")
 			if result, err = l.handler.ComQuery(session, query); err != nil {
-				l.log.Error("session[%v].query.error:%+v", ID, err)
+				log.Error("server.handle.query.from.session[%v].error:%+v", ID, err)
 				if werr := session.writeErrFromError(err); werr != nil {
-					err = werr
 					return
 				}
 				continue
@@ -175,19 +210,21 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 			if err = session.writeResult(result); err != nil {
 				return
 			}
-		case consts.COM_PING:
-			if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
-				return
-			}
 		default:
-			l.log.Error("session.command:%v.not.implemented:%+v", data[0])
-			if err = session.Packets.WriteERR(ERUnknownComError, SSUnknownComError, "command handling not implemented yet: %v", data[0]); err != nil {
+			cmd := sqldb.CommandString(data[0])
+			log.Error("session.command:%s.not.implemented", cmd)
+			sqlErr := sqldb.NewSQLError(sqldb.ER_UNKNOWN_ERROR, "command handling not implemented yet: %s", cmd)
+			if err := session.writeErrFromError(sqlErr); err != nil {
 				return
 			}
 		}
-		// reset packet sequence ID.
+		// Reset packet sequence ID.
 		session.Packets.ResetSeq()
 	}
+}
+
+func (l *Listener) Addr() string {
+	return l.address
 }
 
 // Close close the listener and all connections.

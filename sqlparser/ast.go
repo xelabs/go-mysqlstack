@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
@@ -108,6 +109,9 @@ func (*Update) iStatement() {}
 func (*Delete) iStatement() {}
 func (*Set) iStatement()    {}
 func (*DDL) iStatement()    {}
+func (*Xa) iStatement()     {}
+func (*Shard) iStatement()  {}
+func (*UseDB) iStatement()  {}
 func (*Other) iStatement()  {}
 
 // SelectStatement any SELECT statement.
@@ -381,38 +385,81 @@ func (node *Set) WalkSubtree(visit Visit) error {
 }
 
 // DDL represents a CREATE, ALTER, DROP or RENAME statement.
+// Database is set for new database name
 // Table is set for AlterStr, DropStr, RenameStr.
 // NewName is set for AlterStr, CreateStr, RenameStr.
 type DDL struct {
-	Action   string
-	Table    TableIdent
-	NewName  TableIdent
-	IfExists bool
+	Action      string
+	Database    TableIdent
+	Table       *TableName
+	NewName     *TableName
+	IfExists    bool
+	IfNotExists bool
 }
 
 // DDL strings.
 const (
-	CreateStr = "create"
-	AlterStr  = "alter"
-	DropStr   = "drop"
-	RenameStr = "rename"
+	CreateDBStr    = "create database"
+	CreateTableStr = "create table"
+	CreateIndexStr = "create index"
+	DropDBStr      = "drop database"
+	DropTableStr   = "drop table"
+	DropIndexStr   = "drop index"
+	AlterStr       = "alter"
+	RenameStr      = "rename"
 )
 
 // Format formats the node.
 func (node *DDL) Format(buf *TrackedBuffer) {
 	switch node.Action {
-	case CreateStr:
-		buf.Myprintf("%s table %v", node.Action, node.NewName)
-	case DropStr:
+	case CreateDBStr:
+		ifnotexists := ""
+		if node.IfNotExists {
+			ifnotexists = " if not exists"
+		}
+		buf.Myprintf("%s%s %s", node.Action, ifnotexists, node.Database.String())
+	case DropDBStr:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
-		buf.Myprintf("%s table%s %v", node.Action, exists, node.Table)
+		buf.Myprintf("%s%s %s", node.Action, exists, node.Database.String())
+	case CreateTableStr, CreateIndexStr:
+		ifnotexists := ""
+		if node.IfNotExists {
+			ifnotexists = " if not exists"
+		}
+		db := ""
+		if !node.Table.Qualifier.IsEmpty() {
+			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
+		}
+		buf.Myprintf("%s%s %s%s", node.Action, ifnotexists, db, node.Table.Name.String())
+	case DropTableStr, DropIndexStr:
+		exists := ""
+		if node.IfExists {
+			exists = " if exists"
+		}
+		db := ""
+		if !node.Table.Qualifier.IsEmpty() {
+			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
+		}
+		buf.Myprintf("%s%s %s%s", node.Action, exists, db, node.Table.Name.String())
 	case RenameStr:
-		buf.Myprintf("%s table %v %v", node.Action, node.Table, node.NewName)
-	default:
-		buf.Myprintf("%s table %v", node.Action, node.Table)
+		db1 := ""
+		if !node.Table.Qualifier.IsEmpty() {
+			db1 = fmt.Sprintf("%s.", node.Table.Qualifier.String())
+		}
+		db2 := ""
+		if !node.NewName.Qualifier.IsEmpty() {
+			db2 = fmt.Sprintf("%s.", node.NewName.Qualifier.String())
+		}
+		buf.Myprintf("%s table %s%s %s%s", node.Action, db1, node.Table.Name.String(), db2, node.NewName.Name.String())
+	case AlterStr:
+		db := ""
+		if !node.Table.Qualifier.IsEmpty() {
+			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
+		}
+		buf.Myprintf("%s table %s%s", node.Action, db, node.Table.Name.String())
 	}
 }
 
@@ -426,6 +473,55 @@ func (node *DDL) WalkSubtree(visit Visit) error {
 		node.Table,
 		node.NewName,
 	)
+}
+
+// XA represents a XA statement.
+// It should be used only as an indicator. It does not contain
+// the full AST for the statement.
+type Xa struct{}
+
+// Format formats the node.
+func (node *Xa) Format(buf *TrackedBuffer) {
+	buf.WriteString("XA")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *Xa) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+// Shard represents 'PARTITION BY HASH(xx)'.
+// It should be used only as an indicator. It does not contain
+// the full AST for the statement.
+type Shard struct {
+	ShardKey string
+}
+
+// Format formats the node.
+func (node *Shard) Format(buf *TrackedBuffer) {
+	buf.Myprintf("PARTITION BY HASH(%s)", node.ShardKey)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *Shard) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+// UseDB represents 'USE db_name'.
+// It should be used only as an indicator. It does not contain
+// the full AST for the statement.
+type UseDB struct {
+	Database string
+}
+
+// Format formats the node.
+func (node *UseDB) Format(buf *TrackedBuffer) {
+	buf.Myprintf("USE %s", node.Database)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *UseDB) WalkSubtree(visit Visit) error {
+	return nil
 }
 
 // Other represents a SHOW, DESCRIBE, or EXPLAIN statement.

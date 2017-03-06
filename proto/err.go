@@ -11,7 +11,7 @@ package proto
 
 import (
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/pkg/errors"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
 const (
@@ -25,39 +25,34 @@ type ERR struct {
 	ErrorMessage string
 }
 
+// UnPackERR parses the error packet and returns a sqldb.SQLError.
 // https://dev.mysql.com/doc/internals/en/packet-ERR_Packet.html
-func UnPackERR(data []byte) (e *ERR, err error) {
-	e = &ERR{}
+func UnPackERR(data []byte) error {
+	var err error
+	e := &ERR{}
 	buf := common.ReadBuffer(data)
-
 	if e.Header, err = buf.ReadU8(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid error packet header: %v", data)
 	}
-
 	if e.Header != ERR_PACKET {
-		err = errors.Errorf("packet.header[%v]!=ERR_PACKET", e.Header)
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid error packet header: %v", e.Header)
 	}
-
 	if e.ErrorCode, err = buf.ReadU16(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid error packet code: %v", data)
 	}
 
 	// Skip SQLStateMarker
 	if _, err = buf.ReadString(1); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid error packet marker: %v", data)
 	}
-
 	if e.SQLState, err = buf.ReadString(5); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid error packet sqlstate: %v", data)
 	}
-
 	msgLen := len(data) - buf.Seek()
 	if e.ErrorMessage, err = buf.ReadString(msgLen); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid error packet message: %v", data)
 	}
-
-	return
+	return sqldb.NewSQLError1(e.ErrorCode, e.SQLState, "%s", e.ErrorMessage)
 }
 
 func PackERR(e *ERR) []byte {

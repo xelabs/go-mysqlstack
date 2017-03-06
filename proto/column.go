@@ -11,6 +11,7 @@ package proto
 
 import (
 	"github.com/XeLabs/go-mysqlstack/common"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
@@ -19,90 +20,91 @@ import (
 func ColumnCount(payload []byte) (count uint64, err error) {
 	buff := common.ReadBuffer(payload)
 	if count, err = buff.ReadLenEncode(); err != nil {
-		return
+		return 0, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting column count failed")
 	}
 	return
 }
 
 // http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-Protocol::ColumnDefinition41
-func UnpackColumn(payload []byte) (field *querypb.Field, err error) {
-	field = &querypb.Field{}
+func UnpackColumn(payload []byte) (*querypb.Field, error) {
+	var err error
+	field := &querypb.Field{}
 	buff := common.ReadBuffer(payload)
 	// Catalog is ignored, always set to "def"
 	if _, err = buff.ReadLenEncodeString(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "skipping col catalog failed")
 	}
 
 	// lenenc_str Schema
 	if field.Database, err = buff.ReadLenEncodeString(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col schema failed")
 	}
 
 	// lenenc_str Table
 	if field.Table, err = buff.ReadLenEncodeString(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col table failed")
 	}
 
 	// lenenc_str Org_Table
 	if field.OrgTable, err = buff.ReadLenEncodeString(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col org_table failed")
 	}
 
 	// lenenc_str Name
 	if field.Name, err = buff.ReadLenEncodeString(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col name failed")
 	}
 
 	// lenenc_str Org_Name
 	if field.OrgName, err = buff.ReadLenEncodeString(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col org_name failed")
 	}
 
 	// lenenc_int length of fixed-length fields [0c], skip
 	if _, err = buff.ReadLenEncode(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col 0c failed")
 	}
 
 	// 2 character set
 	charset, err := buff.ReadU16()
 	if err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col charset failed")
 	}
 	field.Charset = uint32(charset)
 
 	// 4 column length
 	if field.ColumnLength, err = buff.ReadU32(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col columnlength failed")
 	}
 
 	// 1 type
 	t, err := buff.ReadU8()
 	if err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col type failed")
 	}
 
 	// 2 flags
 	flags, err := buff.ReadU16()
 	if err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col flags failed")
 	}
 	field.Flags = uint32(flags)
 
 	// Convert MySQL type
 	if field.Type, err = sqltypes.MySQLToType(int64(t), int64(field.Flags)); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "MySQLToType(%v,%v) failed: %v", t, field.Flags, err)
 	}
 
 	// 1 Decimals
 	decimals, err := buff.ReadU8()
 	if err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting col type failed")
 	}
 	field.Decimals = uint32(decimals)
 
 	// 2 Filler and Default Values is ignored
 
-	return
+	return field, nil
 }
 
 func PackColumn(field *querypb.Field) []byte {

@@ -11,7 +11,7 @@ package proto
 
 import (
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/pkg/errors"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
 const (
@@ -27,40 +27,39 @@ type OK struct {
 }
 
 // https://dev.mysql.com/doc/internals/en/packet-OK_Packet.html
-func UnPackOK(data []byte) (o *OK, err error) {
-	o = &OK{}
+func UnPackOK(data []byte) (*OK, error) {
+	var err error
+	o := &OK{}
 	buf := common.ReadBuffer(data)
 
 	// header
 	if o.Header, err = buf.ReadU8(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid ok packet header: %v", data)
 	}
 	if o.Header != OK_PACKET {
-		err = errors.Errorf("packet.header[%v]!=OK_PACKET", o.Header)
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid ok packet header: %v", o.Header)
 	}
 
 	// AffectedRows
 	if o.AffectedRows, err = buf.ReadLenEncode(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid ok packet affectedrows: %v", data)
 	}
 
 	// LastInsertID
 	if o.LastInsertID, err = buf.ReadLenEncode(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid ok packet lastinsertid: %v", data)
 	}
 
 	// Status
 	if o.StatusFlags, err = buf.ReadU16(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid ok packet statusflags: %v", data)
 	}
 
 	// Warnings
 	if o.Warnings, err = buf.ReadU16(); err != nil {
-		return
+		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "invalid ok packet warnings: %v", data)
 	}
-
-	return
+	return o, nil
 }
 
 func PackOK(o *OK) []byte {

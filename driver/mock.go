@@ -13,11 +13,13 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 	"github.com/XeLabs/go-mysqlstack/xlog"
 )
@@ -31,7 +33,24 @@ func randomPort(min int, max int) int {
 	return d
 }
 
+type exprResult struct {
+	expr   *regexp.Regexp
+	result *sqltypes.Result
+}
+
+type CondType int
+
+const (
+	COND_NORMAL CondType = iota
+	COND_DELAY
+	COND_ERROR
+	COND_PANIC
+)
+
 type Cond struct {
+	// Cond type.
+	Type CondType
+
 	// Query string
 	Query string
 
@@ -52,107 +71,179 @@ type Cond struct {
 type TestHandler struct {
 	deny  bool
 	log   *xlog.Log
-	lock  sync.RWMutex
+	mu    sync.RWMutex
 	ss    map[uint32]*Session
 	conds map[string]*Cond
+
+	// patterns is a list of regexp to results.
+	patterns []exprResult
+
+	// How many times a query was called.
+	queryCalled map[string]int
 }
 
 func NewTestHandler(log *xlog.Log) *TestHandler {
 	return &TestHandler{
-		log:   log,
-		ss:    make(map[uint32]*Session),
-		conds: make(map[string]*Cond),
+		log:         log,
+		ss:          make(map[uint32]*Session),
+		conds:       make(map[string]*Cond),
+		queryCalled: make(map[string]int),
 	}
 }
 
-func (th *TestHandler) SetCond(cond *Cond) {
-	th.conds[strings.ToUpper(cond.Query)] = cond
+func (th *TestHandler) setCond(cond *Cond) {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	th.conds[strings.ToLower(cond.Query)] = cond
+	th.queryCalled[strings.ToLower(cond.Query)] = 0
 }
 
-func (th *TestHandler) RemoveCond(q string) {
-	delete(th.conds, strings.ToUpper(q))
+func (th *TestHandler) removeCond(query string) {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	delete(th.conds, strings.ToLower(query))
+	delete(th.queryCalled, strings.ToLower(query))
 }
 
-// IPCheck impl.
-func (th *TestHandler) IPCheck(addr string) bool {
-	return true
+// ConnectionCheck impl.
+func (th *TestHandler) SessionCheck(s *Session) error {
+	return nil
 }
 
 // AuthCheck impl.
-func (th *TestHandler) AuthCheck(s *Session) bool {
-	if s.Auth.User() == "mock" {
-		return true
+func (th *TestHandler) AuthCheck(s *Session) error {
+	user := s.Auth.User()
+	if user != "mock" {
+		return sqldb.NewSQLError(sqldb.ER_ACCESS_DENIED_ERROR, "Access denied for user '%v'", user)
 	}
-
-	return false
+	return nil
 }
 
 // Register impl.
-func (th *TestHandler) Register(s *Session) {
-	th.lock.Lock()
-	defer th.lock.Unlock()
+func (th *TestHandler) NewSession(s *Session) {
+	th.mu.Lock()
+	defer th.mu.Unlock()
 	th.ss[s.ID] = s
 }
 
 // UnRegister impl.
-func (th *TestHandler) UnRegister(s *Session) {
-	th.lock.Lock()
-	defer th.lock.Unlock()
+func (th *TestHandler) SessionClosed(s *Session) {
+	th.mu.Lock()
+	defer th.mu.Unlock()
 	delete(th.ss, s.ID)
 }
 
+// ComInitDB impl.
+func (th *TestHandler) ComInitDB(s *Session, db string) error {
+	return nil
+}
+
 // ComQuery impl.
-func (th *TestHandler) ComQuery(s *Session, q string) (*sqltypes.Result, error) {
-	q = strings.ToUpper(q)
-	th.log.Debug("testHandler.ComQuery:%v", q)
+func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, error) {
+	th.log.Debug("test.handler.ComQuery:%v", query)
+	query = strings.ToLower(query)
 
-	cond := th.conds[q]
+	th.mu.RLock()
+	defer th.mu.RUnlock()
+	th.queryCalled[query]++
+
+	cond := th.conds[query]
 	if cond != nil {
-		if cond.Delay > 0 {
+		switch cond.Type {
+		case COND_DELAY:
 			time.Sleep(time.Millisecond * time.Duration(cond.Delay))
-		}
-
-		switch {
-		case cond.Error != nil:
-			th.log.Debug("mock.handler.error:%+v....", cond)
+			return cond.Result, nil
+		case COND_ERROR:
 			return nil, cond.Error
-
-		case cond.Panic:
-			th.log.Panic("test.panic....")
-
-		default:
+		case COND_PANIC:
+			th.log.Panic("test.handler.panic....")
+		case COND_NORMAL:
 			return cond.Result, nil
 		}
 	}
 
 	// kill filter.
-	if strings.HasPrefix(q, "KILL") {
-		if id, err := strconv.ParseUint(strings.Split(q, " ")[1], 10, 32); err == nil {
+	if strings.HasPrefix(query, "kill") {
+		if id, err := strconv.ParseUint(strings.Split(query, " ")[1], 10, 32); err == nil {
 			th.log.Info("mock.to.kill.%v.session", id)
-			th.lock.RLock()
+			th.mu.RLock()
 			session := th.ss[uint32(id)]
 			if session != nil {
 				session.Close()
 			}
-			th.lock.RUnlock()
+			th.mu.RUnlock()
 		}
 		return &sqltypes.Result{}, nil
 	}
 
-	return nil, errors.New("testhandler.comquery.error")
+	// Check query patterns from AddQueryPattern().
+	for _, pat := range th.patterns {
+		if pat.expr.MatchString(query) {
+			return pat.result, nil
+		}
+	}
+
+	return nil, errors.New(fmt.Sprintf("testhandler.query[%v].error[can.not.found.the.cond.please.set.first]", query))
 }
 
-func MockMysqlServer(log *xlog.Log, h Handler) (port int, svr *Listener, err error) {
-	port = randomPort(4000, 6000)
+// AddQuery used to add a query and its expected result.
+func (th *TestHandler) AddQuery(query string, result *sqltypes.Result) {
+	th.setCond(&Cond{Type: COND_NORMAL, Query: query, Result: result})
+}
+
+// AddQueryDelay used to add a query and returns the expected result after delay_ms.
+func (th *TestHandler) AddQueryDelay(query string, result *sqltypes.Result, delay_ms int) {
+	th.setCond(&Cond{Type: COND_DELAY, Query: query, Result: result, Delay: delay_ms})
+}
+
+// AddQueryError used to add a query which will be rejected by a error.
+func (th *TestHandler) AddQueryError(query string, err error) {
+	th.setCond(&Cond{Type: COND_ERROR, Query: query, Error: err})
+}
+
+// AddQueryPanic used to add query but underflying blackhearted.
+func (th *TestHandler) AddQueryPanic(query string) {
+	th.setCond(&Cond{Type: COND_PANIC, Query: query})
+}
+
+// This code was derived from https://github.com/youtube/vitess.
+// AddQueryPattern adds an expected result for a set of queries.
+// These patterns are checked if no exact matches from AddQuery() are found.
+// This function forces the addition of begin/end anchors (^$) and turns on
+// case-insensitive matching mode.
+func (th *TestHandler) AddQueryPattern(queryPattern string, expectedResult *sqltypes.Result) {
+	if len(expectedResult.Rows) > 0 && len(expectedResult.Fields) == 0 {
+		panic(fmt.Errorf("Please add Fields to this Result so it's valid: %v", queryPattern))
+	}
+	expr := regexp.MustCompile("(?is)^" + queryPattern + "$")
+	result := *expectedResult
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	th.patterns = append(th.patterns, exprResult{expr, &result})
+}
+
+// This code was derived from https://github.com/youtube/vitess.
+// GetQueryCalledNum returns how many times db executes a certain query.
+func (th *TestHandler) GetQueryCalledNum(query string) int {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	num, ok := th.queryCalled[strings.ToLower(query)]
+	if !ok {
+		return 0
+	}
+	return num
+}
+
+func MockMysqlServer(log *xlog.Log, h Handler) (svr *Listener, err error) {
+	port := randomPort(7000, 10000)
 	addr := fmt.Sprintf(":%d", port)
 	if svr, err = NewListener(log, addr, h); err != nil {
 		return
 	}
-
 	go func() {
 		svr.Accept()
 	}()
+	time.Sleep(100 * time.Millisecond)
 	log.Debug("mock.server[%v].start...", addr)
-
 	return
 }

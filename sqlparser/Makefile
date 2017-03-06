@@ -5,8 +5,7 @@
 MAKEFLAGS = -s
 
 sql.go: sql.y
-	go tool yacc -o sql.go sql.y
-	gofmt -w sql.go
+	goyacc -o sql.go sql.y
 
 clean:
 	rm -f y.output sql.go

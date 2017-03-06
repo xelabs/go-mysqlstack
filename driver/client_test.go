@@ -10,7 +10,6 @@
 package driver
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,10 +26,10 @@ func TestClient(t *testing.T) {
 
 	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
 	th := NewTestHandler(log)
-	port, svr, err := MockMysqlServer(log, th)
+	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
 	defer svr.Close()
-	address := fmt.Sprintf(":%v", port)
+	address := svr.Addr()
 
 	// query
 	{
@@ -42,7 +41,7 @@ func TestClient(t *testing.T) {
 		// connection ID
 		assert.Equal(t, uint32(1), client.ConnectionID())
 
-		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		th.AddQuery("SELECT2", result2)
 		rows, err := client.Query("SELECT2")
 		assert.Nil(t, err)
 
@@ -56,17 +55,17 @@ func TestClientClosed(t *testing.T) {
 
 	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
 	th := NewTestHandler(log)
-	port, svr, err := MockMysqlServer(log, th)
+	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
 	defer svr.Close()
-	address := fmt.Sprintf(":%v", port)
+	address := svr.Addr()
 
 	{
 		// create session 1
 		client1, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
 
-		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		th.AddQuery("SELECT2", result2)
 		r, err := client1.FetchAll("SELECT2", -1)
 		assert.Nil(t, err)
 		assert.Equal(t, result2, r)

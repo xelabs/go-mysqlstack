@@ -9,6 +9,7 @@ test:
 	@$(MAKE) testxlog
 	@$(MAKE) testsqlparser
 	@$(MAKE) testcommon
+	@$(MAKE) testsqldb
 	@$(MAKE) testproto
 	@$(MAKE) testpacket
 	@$(MAKE) testdriver
@@ -19,6 +20,8 @@ testsqlparser:
 	go test -v ./sqlparser
 testcommon:
 	go test -v ./common
+testsqldb:
+	go test -v ./sqldb
 testproto:
 	go test -v ./proto
 testpacket:
@@ -26,7 +29,7 @@ testpacket:
 testdriver:
 	go test -v ./driver
 
-COVPKGS = ./sqlparser ./common ./proto ./packet ./driver
+COVPKGS = ./sqlparser ./common ./sqldb ./proto ./packet ./driver
 coverage:
 	go get github.com/pierrre/gotestcover
 	gotestcover -coverprofile=coverage.out -v $(COVPKGS)

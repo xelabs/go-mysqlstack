@@ -12,8 +12,6 @@ package packet
 import (
 	"bufio"
 	"io"
-
-	"github.com/pkg/errors"
 )
 
 const PACKET_BUFFER_SIZE = 1500 // default MTU
@@ -56,7 +54,7 @@ func (rw *ReaderWriter) Read(need int) ([]byte, error) {
 		}
 
 		if (rw.left + n) < need {
-			return nil, errors.WithStack(io.ErrUnexpectedEOF)
+			return nil, io.ErrUnexpectedEOF
 		}
 
 		rw.left += n
@@ -69,11 +67,12 @@ func (rw *ReaderWriter) Read(need int) ([]byte, error) {
 	return datas, nil
 }
 
-func (rw *ReaderWriter) Write(datas []byte) (err error) {
+func (rw *ReaderWriter) Write(datas []byte) error {
+	var err error
 	var n int
 
 	if n, err = rw.writer.Write(datas); err != nil {
-		return errors.WithStack(err)
+		return err
 	} else {
 		if n != len(datas) {
 			return ErrBadConn

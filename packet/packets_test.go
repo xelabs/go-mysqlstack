@@ -64,7 +64,7 @@ func TestPacketsNext(t *testing.T) {
 
 		conn.Write(buff.Datas())
 		_, err := packets.Next()
-		want := "pkt.read.seq[1]!=pkt.actual.seq[2]"
+		want := "pkt.read.seq[1]!=pkt.actual.seq[2] (errno 1835) (sqlstate HY000)"
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
@@ -306,7 +306,7 @@ func TestPacketsColumnsERR(t *testing.T) {
 	}
 
 	{
-		want := "ERROR"
+		want := "ERROR (errno 1) (sqlstate ABCDE)"
 		_, _, myerr, _ := rPackets.ReadColumns()
 		got := myerr.Error()
 		assert.Equal(t, want, got)
@@ -329,7 +329,7 @@ func TestPacketsColumnsError(t *testing.T) {
 	}
 
 	{
-		want := "EOF"
+		want := "server maybe lost, error EOF (errno 1105) (sqlstate HY000)"
 		_, _, myerr, err := rPackets.ReadColumns()
 		assert.Nil(t, myerr)
 		got := err.Error()

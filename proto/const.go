@@ -10,28 +10,28 @@
 package proto
 
 import (
-	"github.com/XeLabs/go-mysqlstack/consts"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
 const (
 	DefaultAuthPluginName = "mysql_native_password"
 
-	DefaultServerCapability = consts.CLIENT_LONG_PASSWORD |
-		consts.CLIENT_LONG_FLAG |
-		consts.CLIENT_CONNECT_WITH_DB |
-		consts.CLIENT_PROTOCOL_41 |
-		consts.CLIENT_TRANSACTIONS |
-		consts.CLIENT_MULTI_STATEMENTS |
-		consts.CLIENT_PLUGIN_AUTH |
-		consts.CLIENT_SECURE_CONNECTION
+	DefaultServerCapability = sqldb.CLIENT_LONG_PASSWORD |
+		sqldb.CLIENT_LONG_FLAG |
+		sqldb.CLIENT_CONNECT_WITH_DB |
+		sqldb.CLIENT_PROTOCOL_41 |
+		sqldb.CLIENT_TRANSACTIONS |
+		sqldb.CLIENT_MULTI_STATEMENTS |
+		sqldb.CLIENT_PLUGIN_AUTH |
+		sqldb.CLIENT_SECURE_CONNECTION
 
-	DefaultClientCapability = consts.CLIENT_LONG_PASSWORD |
-		consts.CLIENT_LONG_FLAG |
-		consts.CLIENT_PROTOCOL_41 |
-		consts.CLIENT_TRANSACTIONS |
-		consts.CLIENT_MULTI_STATEMENTS |
-		consts.CLIENT_PLUGIN_AUTH |
-		consts.CLIENT_SECURE_CONNECTION
+	DefaultClientCapability = sqldb.CLIENT_LONG_PASSWORD |
+		sqldb.CLIENT_LONG_FLAG |
+		sqldb.CLIENT_PROTOCOL_41 |
+		sqldb.CLIENT_TRANSACTIONS |
+		sqldb.CLIENT_MULTI_STATEMENTS |
+		sqldb.CLIENT_PLUGIN_AUTH |
+		sqldb.CLIENT_SECURE_CONNECTION
 )
 
 var (

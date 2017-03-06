@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -77,7 +77,7 @@ func TestAuthUnpackError(t *testing.T) {
 			0x8d, 0xa6, 0xff,
 		}
 		err := auth.UnPack(data)
-		want := "EOF"
+		want := "auth.unpack: can't read client flags"
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
@@ -88,7 +88,7 @@ func TestAuthUnPack(t *testing.T) {
 	want.charset = 0x02
 	want.authResponseLen = 20
 	want.clientFlags = DefaultClientCapability
-	want.clientFlags |= consts.CLIENT_CONNECT_WITH_DB
+	want.clientFlags |= sqldb.CLIENT_CONNECT_WITH_DB
 	want.authResponse = nativePassword("sbtest", DefaultSalt)
 	want.database = "sbtest"
 	want.user = "sbtest"
@@ -110,9 +110,9 @@ func TestAuthUnPack(t *testing.T) {
 func TestAuthWithoutPWD(t *testing.T) {
 	want := NewAuth()
 	want.charset = 0x02
-	want.authResponseLen = 1
+	want.authResponseLen = 0
 	want.clientFlags = DefaultClientCapability
-	want.clientFlags |= consts.CLIENT_CONNECT_WITH_DB
+	want.clientFlags |= sqldb.CLIENT_CONNECT_WITH_DB
 	want.authResponse = nativePassword("", DefaultSalt)
 	want.database = "sbtest"
 	want.user = "sbtest"
@@ -157,8 +157,8 @@ func TestAuthWithoutSecure(t *testing.T) {
 	want := NewAuth()
 	want.charset = 0x02
 	want.authResponseLen = 20
-	want.clientFlags = DefaultClientCapability &^ consts.CLIENT_SECURE_CONNECTION &^ consts.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
-	want.clientFlags |= consts.CLIENT_CONNECT_WITH_DB
+	want.clientFlags = DefaultClientCapability &^ sqldb.CLIENT_SECURE_CONNECTION &^ sqldb.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+	want.clientFlags |= sqldb.CLIENT_CONNECT_WITH_DB
 	want.authResponse = nativePassword("sbtest", DefaultSalt)
 	want.user = "sbtest"
 	want.database = "sbtest"
@@ -166,7 +166,7 @@ func TestAuthWithoutSecure(t *testing.T) {
 
 	got := NewAuth()
 	err := got.UnPack(want.Pack(
-		DefaultClientCapability&^consts.CLIENT_SECURE_CONNECTION,
+		DefaultClientCapability&^sqldb.CLIENT_SECURE_CONNECTION,
 		0x02,
 		"sbtest",
 		"sbtest",
@@ -180,8 +180,8 @@ func TestAuthWithoutSecure(t *testing.T) {
 
 func TestAuthUnPackError(t *testing.T) {
 	capabilityFlags := DefaultClientCapability
-	capabilityFlags |= consts.CLIENT_PROTOCOL_41
-	capabilityFlags |= consts.CLIENT_CONNECT_WITH_DB
+	capabilityFlags |= sqldb.CLIENT_PROTOCOL_41
+	capabilityFlags |= sqldb.CLIENT_CONNECT_WITH_DB
 
 	// NULL
 	f0 := func(buff *common.Buffer) {

@@ -10,10 +10,9 @@
 package driver
 
 import (
-	"fmt"
-	"sync"
 	"testing"
 
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 	"github.com/XeLabs/go-mysqlstack/xlog"
 	"github.com/stretchr/testify/assert"
 
@@ -48,10 +47,10 @@ func TestServer(t *testing.T) {
 
 	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
 	th := NewTestHandler(log)
-	port, svr, err := MockMysqlServer(log, th)
+	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
 	defer svr.Close()
-	address := fmt.Sprintf(":%v", port)
+	address := svr.Addr()
 
 	// query
 	{
@@ -59,7 +58,7 @@ func TestServer(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		th.AddQuery("SELECT1", result1)
 		_, err = client.Query("SELECT1")
 		assert.Nil(t, err)
 	}
@@ -69,7 +68,7 @@ func TestServer(t *testing.T) {
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
 
-		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		th.AddQuery("SELECT2", result2)
 		_, err = client.Query("SELECT2")
 		assert.Nil(t, err)
 		client.Close()
@@ -81,7 +80,7 @@ func TestServer(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		th.AddQuery("SELECT1", result1)
 		err = client.Exec("SELECT1")
 		assert.Nil(t, err)
 	}
@@ -92,7 +91,7 @@ func TestServer(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		th.AddQuery("SELECT1", result1)
 		r, err := client.FetchAll("SELECT1", -1)
 		assert.Nil(t, err)
 		assert.Equal(t, result1, r)
@@ -103,7 +102,7 @@ func TestServer(t *testing.T) {
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
 
-		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		th.AddQuery("SELECT1", result1)
 		r, err := client.FetchAll("SELECT1", 1)
 		assert.Nil(t, err)
 		defer client.Close()
@@ -119,10 +118,11 @@ func TestServer(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "ERROR1", Error: NewSQLError(ERUnknownComError, SSUnknownComError, "query.error")})
+		sqlErr := sqldb.NewSQLError(sqldb.ER_UNKNOWN_ERROR, "query.error")
+		th.AddQueryError("ERROR1", sqlErr)
 		err = client.Exec("ERROR1")
 		assert.NotNil(t, err)
-		want := "query.error"
+		want := "query.error (errno 1105) (sqlstate HY000)"
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
@@ -133,7 +133,7 @@ func TestServer(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "PANIC", Panic: true})
+		th.AddQueryPanic("PANIC")
 		client.Exec("PANIC")
 
 		want := true
@@ -160,7 +160,7 @@ func TestServer(t *testing.T) {
 	// auth denied
 	{
 		_, err := NewConn("mockx", "mock", address, "test")
-		want := "Access denied for user 'mockx'"
+		want := "Access denied for user 'mockx' (errno 1045) (sqlstate 28000)"
 		got := err.Error()
 		assert.Equal(t, want, got)
 	}
@@ -171,16 +171,16 @@ func TestServerSessionClose(t *testing.T) {
 
 	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
 	th := NewTestHandler(log)
-	port, _, err := MockMysqlServer(log, th)
+	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
-	address := fmt.Sprintf(":%v", port)
+	address := svr.Addr()
 
 	{
 		// create session 1
 		client1, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
 
-		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		th.AddQuery("SELECT2", result2)
 		r, err := client1.FetchAll("SELECT2", -1)
 		assert.Nil(t, err)
 		assert.Equal(t, result2, r)
@@ -190,37 +190,5 @@ func TestServerSessionClose(t *testing.T) {
 		assert.Nil(t, err)
 		_, err = client2.Query("KILL 1")
 		assert.Nil(t, err)
-	}
-}
-
-func TestServerSessionKilled(t *testing.T) {
-	result2 := &sqltypes.Result{}
-
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
-	th := NewTestHandler(log)
-	port, _, err := MockMysqlServer(log, th)
-	assert.Nil(t, err)
-	address := fmt.Sprintf(":%v", port)
-
-	{
-		// create session 1
-		client1, err := NewConn("mock", "mock", address, "test")
-		assert.Nil(t, err)
-
-		var wg sync.WaitGroup
-		th.SetCond(&Cond{Query: "SELECT2", Result: result2, Delay: 10})
-		wg.Add(1)
-		go func() {
-			_, err := client1.FetchAll("SELECT2", -1)
-			assert.NotNil(t, err)
-			wg.Done()
-		}()
-
-		// kill session 1
-		client2, err := NewConn("mock", "mock", address, "test")
-		assert.Nil(t, err)
-		_, err = client2.Query("KILL 1")
-		assert.Nil(t, err)
-		wg.Wait()
 	}
 }

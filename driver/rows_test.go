@@ -10,7 +10,6 @@
 package driver
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -50,10 +49,10 @@ func TestRows(t *testing.T) {
 
 	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
 	th := NewTestHandler(log)
-	port, svr, err := MockMysqlServer(log, th)
+	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
 	defer svr.Close()
-	address := fmt.Sprintf(":%v", port)
+	address := svr.Addr()
 
 	// query
 	{
@@ -61,7 +60,7 @@ func TestRows(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "SELECT2", Result: result2})
+		th.AddQuery("SELECT2", result2)
 		rows, err := client.Query("SELECT2")
 		assert.Nil(t, err)
 
@@ -75,7 +74,7 @@ func TestRows(t *testing.T) {
 		assert.Nil(t, err)
 		defer client.Close()
 
-		th.SetCond(&Cond{Query: "SELECT1", Result: result1})
+		th.AddQuery("SELECT1", result1)
 		rows, err := client.Query("SELECT1")
 		assert.Nil(t, err)
 		assert.Equal(t, result1.Fields, rows.Fields())

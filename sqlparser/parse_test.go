@@ -497,7 +497,7 @@ func TestValid(t *testing.T) {
 		output: "alter table a",
 	}, {
 		input:  "alter table `By` add foo",
-		output: "alter table `By`",
+		output: "alter table By",
 	}, {
 		input:  "alter table a alter foo",
 		output: "alter table a",
@@ -530,38 +530,31 @@ func TestValid(t *testing.T) {
 		output: "alter table a",
 	}, {
 		input:  "alter table a rename b",
-		output: "rename table a b",
-	}, {
-		input:  "alter table `By` rename `bY`",
-		output: "rename table `By` `bY`",
-	}, {
-		input:  "alter table a rename to b",
-		output: "rename table a b",
-	}, {
-		input: "create table a",
-	}, {
-		input: "create table `by`",
-	}, {
-		input:  "create table if not exists a",
-		output: "create table a",
-	}, {
-		input:  "create index a on b",
-		output: "alter table b",
-	}, {
-		input:  "create unique index a on b",
-		output: "alter table b",
-	}, {
-		input:  "create unique index a using foo on b",
-		output: "alter table b",
-	}, {
-		input:  "create view a",
-		output: "create table a",
-	}, {
-		input:  "alter view a",
 		output: "alter table a",
 	}, {
-		input:  "drop view a",
-		output: "drop table a",
+		input:  "alter table `By` rename `bY`",
+		output: "alter table By",
+	}, {
+		input:  "alter table a rename to b",
+		output: "alter table a",
+	}, {
+		input:  "create table a(a int)",
+		output: "create table a",
+	}, {
+		input:  "create table `by`(a int)",
+		output: "create table by",
+	}, {
+		input:  "create table if not exists a(a int)",
+		output: "create table if not exists a",
+	}, {
+		input:  "create index a on b(a)",
+		output: "create index b",
+	}, {
+		input:  "create unique index a on b(a)",
+		output: "create index b",
+	}, {
+		input:  "create unique index a using foo on b(a)",
+		output: "create index b",
 	}, {
 		input:  "drop table a",
 		output: "drop table a",
@@ -569,17 +562,11 @@ func TestValid(t *testing.T) {
 		input:  "drop table if exists a",
 		output: "drop table if exists a",
 	}, {
-		input:  "drop view if exists a",
-		output: "drop table if exists a",
-	}, {
 		input:  "drop index b on a",
-		output: "alter table a",
+		output: "drop index a",
 	}, {
 		input:  "analyze table a",
 		output: "alter table a",
-	}, {
-		input:  "show foobar",
-		output: "other",
 	}, {
 		input:  "describe foobar",
 		output: "other",
@@ -639,20 +626,17 @@ func TestCaseSensitivity(t *testing.T) {
 		input  string
 		output string
 	}{{
-		input: "create table A",
+		input:  "create table A(a int)",
+		output: "create table A",
 	}, {
-		input:  "create index b on A",
-		output: "alter table A",
+		input:  "create index b on A(a int)",
+		output: "create index A",
 	}, {
 		input:  "alter table A foo",
 		output: "alter table A",
 	}, {
-		// View names get lower-cased.
-		input:  "alter view A foo",
-		output: "alter table a",
-	}, {
 		input:  "alter table A rename to B",
-		output: "rename table A B",
+		output: "alter table A",
 	}, {
 		input:  "rename table A to B",
 		output: "rename table A B",
@@ -664,7 +648,7 @@ func TestCaseSensitivity(t *testing.T) {
 		output: "drop table if exists B",
 	}, {
 		input:  "drop index b on A",
-		output: "alter table A",
+		output: "drop index A",
 	}, {
 		input: "select a from B",
 	}, {
@@ -696,20 +680,8 @@ func TestCaseSensitivity(t *testing.T) {
 	}, {
 		input: "insert into A(A, B) values (1, 2)",
 	}, {
-		input:  "CREATE TABLE A",
+		input:  "CREATE TABLE A(a int)",
 		output: "create table A",
-	}, {
-		input:  "create view A",
-		output: "create table a",
-	}, {
-		input:  "alter view A",
-		output: "alter table a",
-	}, {
-		input:  "drop view A",
-		output: "drop table a",
-	}, {
-		input:  "drop view if exists A",
-		output: "drop table if exists a",
 	}, {
 		input:  "select /* lock in SHARE MODE */ 1 from t lock in SHARE MODE",
 		output: "select /* lock in SHARE MODE */ 1 from t lock in share mode",
@@ -831,6 +803,99 @@ func TestErrors(t *testing.T) {
 		_, err := Parse(tcase.input)
 		if err == nil || err.Error() != tcase.output {
 			t.Errorf("%s: %v, want %s", tcase.input, err, tcase.output)
+		}
+	}
+}
+
+func TestDDLWithDatabase(t *testing.T) {
+	sqls := []struct {
+		input  string
+		output string
+	}{{
+		input:  "create table db.A(a int)",
+		output: "create table db.A",
+	}, {
+		input:  "create index b on db.A(a int)",
+		output: "create index db.A",
+	}, {
+		input:  "alter table db.A foo",
+		output: "alter table db.A",
+	}, {
+		input:  "alter table db.A rename to B",
+		output: "alter table db.A",
+	}, {
+		input:  "rename table db.A to db.B",
+		output: "rename table db.A db.B",
+	}, {
+		input:  "drop table db.B",
+		output: "drop table db.B",
+	}, {
+		input:  "drop table if exists db.B",
+		output: "drop table if exists db.B",
+	}, {
+		input:  "drop index b on db.A",
+		output: "drop index db.A",
+	}, {
+		input:  "CREATE TABLE db.A(a int)",
+		output: "create table db.A",
+	}, {
+		input:  "CREATE database test",
+		output: "create database test",
+	}, {
+		input:  "drop database test",
+		output: "drop database test",
+	}, {
+		input:  "drop database if exists test",
+		output: "drop database if exists test",
+	}}
+	for _, tcase := range sqls {
+		if tcase.output == "" {
+			tcase.output = tcase.input
+		}
+		tree, err := Parse(tcase.input)
+		if err != nil {
+			t.Errorf("input: %s, err: %v", tcase.input, err)
+			continue
+		}
+		out := String(tree)
+		if out != tcase.output {
+			t.Errorf("out: %s, want %s", out, tcase.output)
+		}
+	}
+}
+
+func TestShow(t *testing.T) {
+	sqls := []struct {
+		input  string
+		output string
+	}{{
+		input:  "show databases",
+		output: "SHOW DATABASES",
+	}, {
+		input:  "show tables",
+		output: "SHOW TABLES",
+	}, {
+		input:  "show tables from test",
+		output: "SHOW TABLES FROM test",
+	}, {
+		input:  "show create table t1",
+		output: "SHOW CREATE TABLE t1",
+	}, {
+		input:  "show create table test.t1",
+		output: "SHOW CREATE TABLE test.t1",
+	}}
+	for _, tcase := range sqls {
+		if tcase.output == "" {
+			tcase.output = tcase.input
+		}
+		tree, err := Parse(tcase.input)
+		if err != nil {
+			t.Errorf("input: %s, err: %v", tcase.input, err)
+			continue
+		}
+		out := String(tree)
+		if out != tcase.output {
+			t.Errorf("out: %s, want %s", out, tcase.output)
 		}
 	}
 }

@@ -13,8 +13,7 @@ import (
 	"crypto/rand"
 
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
-	"github.com/pkg/errors"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
 type Greeting struct {
@@ -43,8 +42,8 @@ func NewGreeting(connectionID uint32) *Greeting {
 		serverVersion:   "Radon 5.7",
 		ConnectionID:    connectionID,
 		Capability:      DefaultServerCapability,
-		Charset:         consts.CHARSET_UTF8,
-		status:          consts.SERVER_STATUS_AUTOCOMMIT,
+		Charset:         sqldb.CharacterSetUtf8,
+		status:          sqldb.SERVER_STATUS_AUTOCOMMIT,
 		Salt:            make([]byte, 20),
 	}
 
@@ -88,7 +87,7 @@ func (g *Greeting) Pack() []byte {
 	buf.WriteU16(capLower)
 
 	// 1: character set
-	buf.WriteU8(consts.CHARSET_UTF8)
+	buf.WriteU8(sqldb.CharacterSetUtf8)
 
 	// 2: status flags
 	buf.WriteU16(g.status)
@@ -115,101 +114,100 @@ func (g *Greeting) Pack() []byte {
 	return buf.Datas()
 }
 
-func (g *Greeting) UnPack(payload []byte) (err error) {
+func (g *Greeting) UnPack(payload []byte) error {
+	var err error
 	buf := common.ReadBuffer(payload)
 
 	// 1: [0a] protocol version
 	if g.protocolVersion, err = buf.ReadU8(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting protocol-version failed")
 	}
 
 	// string[NUL]: server version
 	if g.serverVersion, err = buf.ReadStringNUL(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting server-version failed")
 	}
 
 	// 4: connection id
 	if g.ConnectionID, err = buf.ReadU32(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting onnection-id failed")
 	}
 
 	// string[8]: auth-plugin-data-part-1
 	var salt8 []byte
 	if salt8, err = buf.ReadBytes(8); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting auth-plugin-data-part-1 failed")
 	}
 	copy(g.Salt, salt8)
 
 	// 1: [00] filler
 	if err = buf.ReadZero(1); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting filler failed")
 	}
 
 	// 2: capability flags (lower 2 bytes)
 	var capLower uint16
 	if capLower, err = buf.ReadU16(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting capability-flags failed")
 	}
 
 	// 1: character set
 	if g.Charset, err = buf.ReadU8(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting charset failed")
 	}
 
 	// 2: status flags
 	if g.status, err = buf.ReadU16(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting status-flags failed")
 	}
 
 	// 2: capability flags (upper 2 bytes)
 	var capUpper uint16
 	if capUpper, err = buf.ReadU16(); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting capability-flags-upper failed")
 	}
 	g.Capability = (uint32(capUpper) << 16) | (uint32(capLower))
 
 	// 1: length of auth-plugin-data-part-1
 	var SLEN byte
-	if (g.Capability & consts.CLIENT_PLUGIN_AUTH) > 0 {
+	if (g.Capability & sqldb.CLIENT_PLUGIN_AUTH) > 0 {
 		if SLEN, err = buf.ReadU8(); err != nil {
-			return
+			return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting auth-plugin-data length failed")
 		}
 	} else {
 		if err = buf.ReadZero(1); err != nil {
-			return
+			return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting zero failed")
 		}
 	}
 
 	// string[10]: reserved (all [00])
 	if err = buf.ReadZero(10); err != nil {
-		return
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting reserved failed")
 	}
 
 	// string[$len]: auth-plugin-data-part-2 ($len=MAX(13, length of auth-plugin-data - 8))
-	if (g.Capability & consts.CLIENT_SECURE_CONNECTION) > 0 {
+	if (g.Capability & sqldb.CLIENT_SECURE_CONNECTION) > 0 {
 		read := int(SLEN) - 8
 		if read < 0 || read > 13 {
 			read = 13
 		}
 		var salt2 []byte
 		if salt2, err = buf.ReadBytes(read); err != nil {
-			return
+			return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting salt2 failed")
 		}
 
 		// The last byte has to be 0, and is not part of the data.
 		if salt2[read-1] != 0 {
-			err = errors.New("parseInitialHandshakePacket: auth-plugin-data-part-2 is not 0 terminated")
-			return
+			return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting auth-plugin-data-part-2 is not 0 terminated")
 		}
 		copy(g.Salt[8:], salt2[:read-1])
 	}
 
 	// string[NUL]    auth-plugin name
-	if (g.Capability & consts.CLIENT_PLUGIN_AUTH) > 0 {
+	if (g.Capability & sqldb.CLIENT_PLUGIN_AUTH) > 0 {
 		if g.authPluginName, err = buf.ReadStringNUL(); err != nil {
-			return
+			return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "extracting greeting auth-plugin-name failed")
 		}
 	}
-
 	return nil
 }

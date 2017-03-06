@@ -11,8 +11,10 @@ package proto
 
 import (
 	"crypto/sha1"
+	"fmt"
+
 	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/consts"
+	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
 type Auth struct {
@@ -47,54 +49,58 @@ func (a *Auth) User() string {
 	return a.user
 }
 
+func (a *Auth) AuthResponse() []byte {
+	return a.authResponse
+}
+
 // https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeResponse41
-func (a *Auth) UnPack(payload []byte) (err error) {
+// UnPack parses the handshake sent by the client.
+func (a *Auth) UnPack(payload []byte) error {
+	var err error
 	buf := common.ReadBuffer(payload)
 
 	if a.clientFlags, err = buf.ReadU32(); err != nil {
-		return
+		return fmt.Errorf("auth.unpack: can't read client flags")
 	}
-
+	if a.clientFlags&sqldb.CLIENT_PROTOCOL_41 == 0 {
+		return fmt.Errorf("auth.unpack: only support protocol 4.1")
+	}
 	if a.maxPacketSize, err = buf.ReadU32(); err != nil {
-		return
+		return fmt.Errorf("auth.unpack: can't read maxPacketSize")
 	}
-
 	if a.charset, err = buf.ReadU8(); err != nil {
-		return
+		return fmt.Errorf("auth.unpack: can't read charset")
 	}
-
 	if err = buf.ReadZero(23); err != nil {
-		return
+		return fmt.Errorf("auth.unpack: can't read 23zeros")
 	}
-
 	if a.user, err = buf.ReadStringNUL(); err != nil {
-		return
+		return fmt.Errorf("auth.unpack: can't read user")
 	}
-
-	if (a.clientFlags & consts.CLIENT_SECURE_CONNECTION) > 0 {
+	if (a.clientFlags & sqldb.CLIENT_SECURE_CONNECTION) > 0 {
 		if a.authResponseLen, err = buf.ReadU8(); err != nil {
-			return
+			return fmt.Errorf("auth.unpack: can't read authResponse length")
 		}
-
 		if a.authResponse, err = buf.ReadBytes(int(a.authResponseLen)); err != nil {
-			return
+			return fmt.Errorf("auth.unpack: can't read authResponse")
 		}
 	} else {
 		if a.authResponse, err = buf.ReadBytesNUL(); err != nil {
-			return
+			return fmt.Errorf("auth.unpack: can't read authResponse")
 		}
 	}
-
-	if (a.clientFlags & consts.CLIENT_CONNECT_WITH_DB) > 0 {
+	if (a.clientFlags & sqldb.CLIENT_CONNECT_WITH_DB) > 0 {
 		if a.database, err = buf.ReadStringNUL(); err != nil {
-			return
+			return fmt.Errorf("auth.unpack: can't read dbname")
 		}
 	}
-
-	if (a.clientFlags & consts.CLIENT_PLUGIN_AUTH) > 0 {
+	if (a.clientFlags & sqldb.CLIENT_PLUGIN_AUTH) > 0 {
 		if a.pluginName, err = buf.ReadStringNUL(); err != nil {
-			return
+			return fmt.Errorf("auth.unpack: can't read pluginName")
 		}
+	}
+	if a.pluginName != DefaultAuthPluginName {
+		return fmt.Errorf("invalid authPluginName, got %v but only support %v", a.pluginName, DefaultAuthPluginName)
 	}
 
 	return nil
@@ -113,18 +119,18 @@ func (a *Auth) Pack(
 	authResponse := nativePassword(password, salt)
 
 	// must always be set
-	capabilityFlags |= consts.CLIENT_PROTOCOL_41
+	capabilityFlags |= sqldb.CLIENT_PROTOCOL_41
 
 	// not supported
-	capabilityFlags &= ^consts.CLIENT_SSL
-	capabilityFlags &= ^consts.CLIENT_COMPRESS
-	capabilityFlags &= ^consts.CLIENT_DEPRECATE_EOF
-	capabilityFlags &= ^consts.CLIENT_CONNECT_ATTRS
+	capabilityFlags &= ^sqldb.CLIENT_SSL
+	capabilityFlags &= ^sqldb.CLIENT_COMPRESS
+	capabilityFlags &= ^sqldb.CLIENT_DEPRECATE_EOF
+	capabilityFlags &= ^sqldb.CLIENT_CONNECT_ATTRS
 
 	if len(database) > 0 {
-		capabilityFlags |= consts.CLIENT_CONNECT_WITH_DB
+		capabilityFlags |= sqldb.CLIENT_CONNECT_WITH_DB
 	} else {
-		capabilityFlags &= ^consts.CLIENT_CONNECT_WITH_DB
+		capabilityFlags &= ^sqldb.CLIENT_CONNECT_WITH_DB
 	}
 
 	// 4 capability flags, CLIENT_PROTOCOL_41 always set
@@ -143,7 +149,7 @@ func (a *Auth) Pack(
 	buf.WriteString(username)
 	buf.WriteZero(1)
 
-	if (capabilityFlags & consts.CLIENT_SECURE_CONNECTION) > 0 {
+	if (capabilityFlags & sqldb.CLIENT_SECURE_CONNECTION) > 0 {
 		// 1 length of auth-response
 		// string[n]  auth-response
 		buf.WriteU8(uint8(len(authResponse)))
@@ -152,10 +158,10 @@ func (a *Auth) Pack(
 		buf.WriteBytes(authResponse)
 		buf.WriteZero(1)
 	}
-	capabilityFlags &= ^consts.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
+	capabilityFlags &= ^sqldb.CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA
 
 	// string[NUL] database
-	if capabilityFlags&consts.CLIENT_CONNECT_WITH_DB > 0 {
+	if capabilityFlags&sqldb.CLIENT_CONNECT_WITH_DB > 0 {
 		buf.WriteString(database)
 		buf.WriteZero(1)
 	}
@@ -171,31 +177,31 @@ func (a *Auth) Pack(
 
 // https://dev.mysql.com/doc/internals/en/secure-password-authentication.html#packet-Authentication::Native41
 // SHA1( password ) XOR SHA1( "20-bytes random data from server" <concat> SHA1( SHA1( password ) ) )
+// Encrypt password using 4.1+ method
 func nativePassword(password string, salt []byte) []byte {
 	if len(password) == 0 {
-		return []byte{0x00}
+		return nil
 	}
 
-	hash := sha1.New()
-	hash.Write([]byte(password))
-	hashPass := hash.Sum(nil)
+	// stage1Hash = SHA1(password)
+	crypt := sha1.New()
+	crypt.Write([]byte(password))
+	stage1 := crypt.Sum(nil)
 
-	hash.Reset()
-	hash.Write(hashPass)
-	doubleHashPass := hash.Sum(nil)
+	// scrambleHash = SHA1(scramble + SHA1(stage1Hash))
+	// inner Hash
+	crypt.Reset()
+	crypt.Write(stage1)
+	hash := crypt.Sum(nil)
+	// outer Hash
+	crypt.Reset()
+	crypt.Write(salt)
+	crypt.Write(hash)
+	scramble := crypt.Sum(nil)
 
-	saltLen := len(salt)
-	if saltLen > 20 {
-		saltLen = 20
+	// token = scrambleHash XOR stage1Hash
+	for i := range scramble {
+		scramble[i] ^= stage1[i]
 	}
-	hash.Reset()
-	hash.Write(salt[:saltLen])
-	hash.Write(doubleHashPass)
-	salts := hash.Sum(nil)
-
-	for i, b := range hashPass {
-		hashPass[i] = b ^ salts[i]
-	}
-
-	return hashPass
+	return scramble
 }

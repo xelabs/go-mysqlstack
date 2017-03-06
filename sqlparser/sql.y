@@ -109,10 +109,11 @@ func forceEOF(yylex interface{}) {
 // DDL Tokens
 %token <empty> CREATE ALTER DROP RENAME ANALYZE
 %token <empty> TABLE INDEX VIEW TO IGNORE IF UNIQUE USING
-%token <empty> SHOW DESCRIBE EXPLAIN
+%token <empty> SHOW DESCRIBE EXPLAIN XA
+%token <empty> PARTITION HASH
 
 // Functions
-%token <empty> CURRENT_TIMESTAMP DATABASE
+%token <empty> CURRENT_TIMESTAMP DATABASE DATABASES TABLES
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <empty> UNUSED
@@ -121,7 +122,7 @@ func forceEOF(yylex interface{}) {
 %type <selStmt> select_statement
 %type <statement> insert_statement update_statement delete_statement set_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement
-%type <statement> analyze_statement other_statement
+%type <statement> analyze_statement other_statement xa_statement shard_statement usedb_statement show_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op
 %type <str> distinct_opt straight_join_opt
@@ -136,9 +137,7 @@ func forceEOF(yylex interface{}) {
 %type <colIdents> index_list
 %type <boolExpr> where_expression_opt
 %type <boolExpr> boolean_expression condition
-%type <boolVal> boolean_value
-%type <str> compare
-%type <insRows> row_list
+%type <boolVal> boolean_value %type <str> compare %type <insRows> row_list
 %type <valExpr> value value_expression num_val
 %type <str> is_suffix
 %type <colTuple> col_tuple
@@ -166,11 +165,12 @@ func forceEOF(yylex interface{}) {
 %type <empty> for_from
 %type <str> ignore_opt
 %type <byt> exists_opt
-%type <empty> not_exists_opt non_rename_operation to_opt constraint_opt using_opt
+%type <empty> non_rename_operation to_opt constraint_opt using_opt
 %type <colIdent> sql_id col_alias as_ci_opt
 %type <tableIdent> table_id table_alias as_opt_id
 %type <empty> as_opt
 %type <empty> force_eof
+%type <boolVal> not_exists_opt
 
 %start any_command
 
@@ -196,6 +196,10 @@ command:
 | rename_statement
 | drop_statement
 | analyze_statement
+| xa_statement
+| shard_statement
+| usedb_statement
+| show_statement
 | other_statement
 
 select_statement:
@@ -247,76 +251,103 @@ set_statement:
   }
 
 create_statement:
-  CREATE TABLE not_exists_opt table_id force_eof
+  CREATE TABLE not_exists_opt table_name openb force_eof
   {
-    $$ = &DDL{Action: CreateStr, NewName: $4}
+    $$ = &DDL{Action: CreateTableStr, IfNotExists:bool($3), Table: $4, NewName: $4}
   }
-| CREATE constraint_opt INDEX ID using_opt ON table_id force_eof
+
+| CREATE DATABASE not_exists_opt table_id
   {
-    // Change this to an alter statement
-    $$ = &DDL{Action: AlterStr, Table: $7, NewName: $7}
+    $$ = &DDL{Action: CreateDBStr, IfNotExists:bool($3), Database: $4}
   }
-| CREATE VIEW sql_id force_eof
+| CREATE constraint_opt INDEX ID using_opt ON table_name openb force_eof
   {
-    $$ = &DDL{Action: CreateStr, NewName: NewTableIdent($3.Lowered())}
+    $$ = &DDL{Action: CreateIndexStr, Table: $7, NewName: $7}
   }
 
 alter_statement:
-  ALTER ignore_opt TABLE table_id non_rename_operation force_eof
+  ALTER ignore_opt TABLE table_name non_rename_operation force_eof
   {
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_id RENAME to_opt table_id
+| ALTER ignore_opt TABLE table_name RENAME to_opt table_name
   {
-    // Change this to a rename statement
-    $$ = &DDL{Action: RenameStr, Table: $4, NewName: $7}
-  }
-| ALTER VIEW sql_id force_eof
-  {
-    $$ = &DDL{Action: AlterStr, Table: NewTableIdent($3.Lowered()), NewName: NewTableIdent($3.Lowered())}
+    $$ = &DDL{Action: AlterStr, Table: $4, NewName: $7}
   }
 
 rename_statement:
-  RENAME TABLE table_id TO table_id
+  RENAME TABLE table_name TO table_name
   {
     $$ = &DDL{Action: RenameStr, Table: $3, NewName: $5}
   }
 
 drop_statement:
-  DROP TABLE exists_opt table_id
+  DROP TABLE exists_opt table_name
   {
     var exists bool
     if $3 != 0 {
       exists = true
     }
-    $$ = &DDL{Action: DropStr, Table: $4, IfExists: exists}
+    $$ = &DDL{Action: DropTableStr, Table: $4, IfExists: exists}
   }
-| DROP INDEX ID ON table_id
+| DROP INDEX ID ON table_name
   {
-    // Change this to an alter statement
-    $$ = &DDL{Action: AlterStr, Table: $5, NewName: $5}
+    $$ = &DDL{Action: DropIndexStr, Table: $5, NewName: $5}
   }
-| DROP VIEW exists_opt sql_id force_eof
+| DROP DATABASE exists_opt table_id
   {
     var exists bool
-        if $3 != 0 {
-          exists = true
-        }
-    $$ = &DDL{Action: DropStr, Table: NewTableIdent($4.Lowered()), IfExists: exists}
+    if $3 != 0 {
+      exists = true
+    }
+    $$ = &DDL{Action: DropDBStr, Database: $4, IfExists: exists}
   }
 
+
 analyze_statement:
-  ANALYZE TABLE table_id
+  ANALYZE TABLE table_name
   {
     $$ = &DDL{Action: AlterStr, Table: $3, NewName: $3}
   }
 
-other_statement:
-  SHOW force_eof
+xa_statement:
+  XA force_eof
   {
-    $$ = &Other{}
+    $$ = &Xa{}
   }
-| DESCRIBE force_eof
+
+shard_statement:
+   PARTITION BY HASH openb ID closeb force_eof
+  {
+    $$ = &Shard{ ShardKey: string($5)}
+  }
+
+usedb_statement:
+   USE ID  force_eof
+  {
+    $$ = &UseDB{ Database: string($2)}
+  }
+
+show_statement:
+  SHOW DATABASES force_eof
+  {
+    $$ = &ShowDatabases{}
+  }
+| SHOW TABLES force_eof
+  {
+    $$ = &ShowTables{}
+  }
+| SHOW TABLES FROM table_id force_eof
+  {
+      $$ = &ShowTables{Database: $4}
+  }
+| SHOW CREATE TABLE table_name force_eof
+  {
+    $$ = &ShowCreateTable{Table: $4}
+  }
+
+other_statement:
+DESCRIBE force_eof
   {
     $$ = &Other{}
   }
@@ -1209,9 +1240,9 @@ exists_opt:
   { $$ = 1 }
 
 not_exists_opt:
-  { $$ = struct{}{} }
+  { $$ = false }
 | IF NOT EXISTS
-  { $$ = struct{}{} }
+  { $$ = true }
 
 ignore_opt:
   { $$ = "" }
