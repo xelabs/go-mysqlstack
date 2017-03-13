@@ -14,59 +14,71 @@
 package packet
 
 import (
+	"bufio"
 	"io"
+	"net"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 )
 
+const (
+	// PACKET_BUFFER_SIZE is how much we buffer for reading.
+	PACKET_BUFFER_SIZE = 16 * 1024
+)
+
 type Stream struct {
 	pktMaxSize int
-	rw         *ReaderWriter
+	header     []byte
+	reader     *bufio.Reader
+	writer     *bufio.Writer
 }
 
-func NewStream(c io.ReadWriter, pktMaxSize int) *Stream {
+func NewStream(conn net.Conn, pktMaxSize int) *Stream {
 	return &Stream{
 		pktMaxSize: pktMaxSize,
-		rw:         NewReaderWriter(c),
+		header:     []byte{0, 0, 0, 0},
+		reader:     bufio.NewReaderSize(conn, PACKET_BUFFER_SIZE),
+		writer:     bufio.NewWriterSize(conn, PACKET_BUFFER_SIZE),
 	}
 }
 
 // Read reads the next packet from the reader
-// The returned pkt.Payload is only guaranteed to be valid until the next read
-func (s *Stream) Read() (pkt Packet, err error) {
-	var datas []byte
-
-	for {
-		var header []byte
-		var body []byte
-
-		// read packet header [32 bit]
-		if header, err = s.rw.Read(4); err != nil {
-			return
-		}
-
-		// payload length [24 bit]
-		payLen := int(uint32(header[0]) | uint32(header[1])<<8 | uint32(header[2])<<16)
-		pkt.SequenceID = header[3]
-
-		if body, err = s.rw.Read(payLen); err != nil {
-			return
-		}
-
-		// more chunks
-		if datas != nil {
-			datas = append(datas, body...)
-		} else {
-			datas = body
-		}
-
-		if payLen < s.pktMaxSize {
-			break
-		}
+// The returned pkt.Datas is only guaranteed to be valid until the next read
+func (s *Stream) Read() (*Packet, error) {
+	// Header.
+	if _, err := io.ReadFull(s.reader, s.header); err != nil {
+		return nil, err
 	}
-	pkt.Payload = datas
 
-	return
+	// Length.
+	pkt := &Packet{}
+	pkt.SequenceID = s.header[3]
+	length := int(uint32(s.header[0]) | uint32(s.header[1])<<8 | uint32(s.header[2])<<16)
+	if length == 0 {
+		return pkt, nil
+	}
+
+	// Datas.
+	data := make([]byte, length)
+	if _, err := io.ReadFull(s.reader, data); err != nil {
+		return nil, err
+	}
+	pkt.Datas = data
+
+	// Single packet.
+	if length < s.pktMaxSize {
+		return pkt, nil
+	}
+
+	// There is more than one packet, read them all.
+	next, err := s.Read()
+	if err != nil {
+		return nil, err
+	} else {
+		pkt.SequenceID = next.SequenceID
+		pkt.Datas = append(pkt.Datas, next.Datas...)
+		return pkt, nil
+	}
 }
 
 // Write writes the packet to writer
@@ -79,7 +91,6 @@ func (s *Stream) Write(data []byte) error {
 	if err := s.Flush(buf.Datas()); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -109,10 +120,15 @@ func (s *Stream) Append(buff *common.Buffer, data []byte) error {
 		data = data[size:]
 		sequence++
 	}
-
 	return nil
 }
 
 func (s *Stream) Flush(datas []byte) error {
-	return s.rw.Write(datas)
+	if _, err := s.writer.Write(datas); err != nil {
+		return err
+	}
+	if err := s.writer.Flush(); err != nil {
+		return err
+	}
+	return nil
 }

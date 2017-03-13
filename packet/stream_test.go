@@ -59,8 +59,8 @@ func TestStream(t *testing.T) {
 		ptk, err := rStream.Read()
 		assert.Nil(t, err)
 
-		assert.Equal(t, ptk.SequenceID, byte(0x01))
-		assert.Equal(t, ptk.Payload, payload.Datas())
+		assert.Equal(t, byte(0x01), ptk.SequenceID)
+		assert.Equal(t, payload.Datas(), ptk.Datas)
 	}
 }
 
@@ -130,8 +130,8 @@ func TestStreamWriteMax(t *testing.T) {
 		ptk, err := rStream.Read()
 		assert.Nil(t, err)
 
-		assert.Equal(t, ptk.SequenceID, byte(0x02))
-		assert.Equal(t, ptk.Payload, payload.Datas())
+		assert.Equal(t, byte(0x02), ptk.SequenceID)
+		assert.Equal(t, payload.Datas(), ptk.Datas)
 	}
 }
 
@@ -207,8 +207,8 @@ func TestStreamWriteOverMax(t *testing.T) {
 		ptk, err := rStream.Read()
 		assert.Nil(t, err)
 
-		assert.Equal(t, ptk.SequenceID, byte(0x02))
-		assert.Equal(t, ptk.Payload, payload.Datas())
+		assert.Equal(t, byte(0x02), ptk.SequenceID)
+		assert.Equal(t, payload.Datas(), ptk.Datas)
 		_, err = rStream.Read()
 		assert.NotNil(t, err)
 	}

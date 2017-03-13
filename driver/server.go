@@ -12,7 +12,6 @@ package driver
 import (
 	"net"
 	"runtime"
-	"strings"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/sqldb"
@@ -97,7 +96,13 @@ func (l *Listener) parserComInitDB(data []byte) string {
 }
 
 func (l *Listener) parserComQuery(data []byte) string {
-	return strings.TrimRight(common.BytesToString(data[1:]), ";")
+	// Trim the right.
+	data = data[1:]
+	last := len(data) - 1
+	if data[last] == ';' {
+		data = data[:last]
+	}
+	return common.BytesToString(data)
 }
 
 // handle is called in a go routine for each client connection.

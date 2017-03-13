@@ -11,7 +11,7 @@ package packet
 
 import (
 	"fmt"
-	"io"
+	"net"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/proto"
@@ -26,7 +26,7 @@ const (
 
 type Packet struct {
 	SequenceID byte
-	Payload    []byte
+	Datas      []byte
 }
 
 type Packets struct {
@@ -34,9 +34,9 @@ type Packets struct {
 	stream *Stream
 }
 
-func NewPackets(rw io.ReadWriter) *Packets {
+func NewPackets(c net.Conn) *Packets {
 	return &Packets{
-		stream: NewStream(rw, PACKET_MAX_SIZE),
+		stream: NewStream(c, PACKET_MAX_SIZE),
 	}
 }
 
@@ -52,7 +52,7 @@ func (p *Packets) Next() (v []byte, e error) {
 	}
 	p.seq++
 
-	return pkt.Payload, nil
+	return pkt.Datas, nil
 }
 
 // Write writes the packet to stream

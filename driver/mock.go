@@ -36,6 +36,7 @@ func randomPort(min int, max int) int {
 type exprResult struct {
 	expr   *regexp.Regexp
 	result *sqltypes.Result
+	err    error
 }
 
 type CondType int
@@ -76,18 +77,15 @@ type TestHandler struct {
 	conds map[string]*Cond
 
 	// patterns is a list of regexp to results.
-	patterns []exprResult
-
-	// How many times a query was called.
-	queryCalled map[string]int
+	patterns      []exprResult
+	patternErrors []exprResult
 }
 
 func NewTestHandler(log *xlog.Log) *TestHandler {
 	return &TestHandler{
-		log:         log,
-		ss:          make(map[uint32]*Session),
-		conds:       make(map[string]*Cond),
-		queryCalled: make(map[string]int),
+		log:   log,
+		ss:    make(map[uint32]*Session),
+		conds: make(map[string]*Cond),
 	}
 }
 
@@ -95,14 +93,23 @@ func (th *TestHandler) setCond(cond *Cond) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
 	th.conds[strings.ToLower(cond.Query)] = cond
-	th.queryCalled[strings.ToLower(cond.Query)] = 0
 }
 
 func (th *TestHandler) removeCond(query string) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
 	delete(th.conds, strings.ToLower(query))
-	delete(th.queryCalled, strings.ToLower(query))
+}
+
+// ResetAll resets all querys.
+func (th *TestHandler) ResetAll() {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	for k, _ := range th.conds {
+		delete(th.conds, k)
+	}
+	th.patterns = make([]exprResult, 0, 4)
+	th.patternErrors = make([]exprResult, 0, 4)
 }
 
 // ConnectionCheck impl.
@@ -143,10 +150,6 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 	th.log.Debug("test.handler.ComQuery:%v", query)
 	query = strings.ToLower(query)
 
-	th.mu.RLock()
-	defer th.mu.RUnlock()
-	th.queryCalled[query]++
-
 	cond := th.conds[query]
 	if cond != nil {
 		switch cond.Type {
@@ -166,17 +169,22 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 	if strings.HasPrefix(query, "kill") {
 		if id, err := strconv.ParseUint(strings.Split(query, " ")[1], 10, 32); err == nil {
 			th.log.Info("mock.to.kill.%v.session", id)
-			th.mu.RLock()
 			session := th.ss[uint32(id)]
 			if session != nil {
 				session.Close()
 			}
-			th.mu.RUnlock()
 		}
 		return &sqltypes.Result{}, nil
 	}
 
+	th.mu.Lock()
+	defer th.mu.Unlock()
 	// Check query patterns from AddQueryPattern().
+	for _, pat := range th.patternErrors {
+		if pat.expr.MatchString(query) {
+			return nil, pat.err
+		}
+	}
 	for _, pat := range th.patterns {
 		if pat.expr.MatchString(query) {
 			return pat.result, nil
@@ -219,23 +227,18 @@ func (th *TestHandler) AddQueryPattern(queryPattern string, expectedResult *sqlt
 	result := *expectedResult
 	th.mu.Lock()
 	defer th.mu.Unlock()
-	th.patterns = append(th.patterns, exprResult{expr, &result})
+	th.patterns = append(th.patterns, exprResult{expr, &result, nil})
 }
 
-// This code was derived from https://github.com/youtube/vitess.
-// GetQueryCalledNum returns how many times db executes a certain query.
-func (th *TestHandler) GetQueryCalledNum(query string) int {
+func (th *TestHandler) AddQueryErrorPattern(queryPattern string, err error) {
+	expr := regexp.MustCompile("(?is)^" + queryPattern + "$")
 	th.mu.Lock()
 	defer th.mu.Unlock()
-	num, ok := th.queryCalled[strings.ToLower(query)]
-	if !ok {
-		return 0
-	}
-	return num
+	th.patternErrors = append(th.patternErrors, exprResult{expr, nil, err})
 }
 
 func MockMysqlServer(log *xlog.Log, h Handler) (svr *Listener, err error) {
-	port := randomPort(7000, 10000)
+	port := randomPort(7000, 20000)
 	addr := fmt.Sprintf(":%d", port)
 	if svr, err = NewListener(log, addr, h); err != nil {
 		return

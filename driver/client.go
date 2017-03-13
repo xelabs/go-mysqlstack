@@ -11,6 +11,7 @@ package driver
 
 import (
 	"net"
+	"time"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/packet"
@@ -52,24 +53,8 @@ func (c *conn) handleErrorPacket(data []byte) error {
 	return nil
 }
 
-func NewConn(username, password, address, database string) (c *conn, err error) {
+func (c *conn) handShake(username, password, database string) (err error) {
 	var payload []byte
-
-	c = &conn{}
-	if c.netConn, err = net.Dial("tcp", address); err != nil {
-		return
-	}
-
-	defer func() {
-		if err != nil {
-			c.Cleanup()
-		}
-	}()
-
-	c.auth = proto.NewAuth()
-	c.greeting = proto.NewGreeting(0)
-	c.packets = packet.NewPackets(c.netConn)
-
 	//Parses the initial handshake from the server.
 	{
 		// greeting read
@@ -121,7 +106,33 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 			return
 		}
 	}
+	return
+}
 
+// NewConn used to create a new client connection.
+// The timeout is 30 seconds.
+func NewConn(username, password, address, database string) (c *conn, err error) {
+	c = &conn{}
+	timeout := time.Duration(30) * time.Second
+	if c.netConn, err = net.DialTimeout("tcp", address, timeout); err != nil {
+		return
+	}
+	defer func() {
+		if err != nil {
+			c.Cleanup()
+		}
+	}()
+	// Set timeouts, make the handshake timeout if the underflying connection blocked.
+	// This timeout only used in handshake, we will disable(set zero time) it at last.
+	c.netConn.SetReadDeadline(time.Now().Add(timeout))
+	defer c.netConn.SetReadDeadline(time.Time{})
+
+	c.auth = proto.NewAuth()
+	c.greeting = proto.NewGreeting(0)
+	c.packets = packet.NewPackets(c.netConn)
+	if err = c.handShake(username, password, database); err != nil {
+		return
+	}
 	return c, nil
 }
 
@@ -259,9 +270,6 @@ func (c *conn) Cleanup() {
 // Close closes the connection
 func (c *conn) Close() error {
 	if c.netConn != nil {
-		if err := c.packets.WriteCommand(sqldb.COM_QUIT, nil); err != nil {
-			return err
-		}
 		c.Cleanup()
 	}
 
