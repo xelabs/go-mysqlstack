@@ -235,7 +235,7 @@ func TestParsedQuery(t *testing.T) {
 					Value: []byte("1"),
 				},
 			},
-			"unexpected list arg type *querypb.BindVariable(INT64) for key vals",
+			"unexpected list arg type *querypb.BindVariable(265) for key vals",
 		}, {
 			"list bind var for non-list",
 			"select * from a where id = :vals",

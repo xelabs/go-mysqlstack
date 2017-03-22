@@ -23,6 +23,7 @@ import (
 )
 
 type Conn interface {
+	Ping() error
 	Close() error
 	Closed() bool
 	Cleanup()
@@ -190,7 +191,6 @@ func (c *conn) Ping() error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -217,7 +217,6 @@ func (c *conn) Exec(sql string) error {
 	if err := rows.Close(); err != nil {
 		c.Cleanup()
 	}
-
 	return nil
 }
 
@@ -251,7 +250,6 @@ func (c *conn) FetchAll(sql string, maxrows int) (*sqltypes.Result, error) {
 		c.Cleanup()
 		return nil, err
 	}
-
 	return r, nil
 }
 
@@ -272,7 +270,6 @@ func (c *conn) Close() error {
 	if c.netConn != nil {
 		c.Cleanup()
 	}
-
 	return nil
 }
 

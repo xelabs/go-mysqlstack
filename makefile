@@ -18,6 +18,7 @@ testxlog:
 	go test -v ./xlog
 testsqlparser:
 	go test -v ./sqlparser
+	go test -v ./sqlparser/depends/sqltypes
 testcommon:
 	go test -v ./common
 testsqldb:

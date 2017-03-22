@@ -79,13 +79,17 @@ type TestHandler struct {
 	// patterns is a list of regexp to results.
 	patterns      []exprResult
 	patternErrors []exprResult
+
+	// How many times a query was called.
+	queryCalled map[string]int
 }
 
 func NewTestHandler(log *xlog.Log) *TestHandler {
 	return &TestHandler{
-		log:   log,
-		ss:    make(map[uint32]*Session),
-		conds: make(map[string]*Cond),
+		log:         log,
+		ss:          make(map[uint32]*Session),
+		conds:       make(map[string]*Cond),
+		queryCalled: make(map[string]int),
 	}
 }
 
@@ -93,12 +97,14 @@ func (th *TestHandler) setCond(cond *Cond) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
 	th.conds[strings.ToLower(cond.Query)] = cond
+	th.queryCalled[strings.ToLower(cond.Query)] = 0
 }
 
 func (th *TestHandler) removeCond(query string) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
 	delete(th.conds, strings.ToLower(query))
+	delete(th.queryCalled, strings.ToLower(query))
 }
 
 // ResetAll resets all querys.
@@ -149,6 +155,10 @@ func (th *TestHandler) ComInitDB(s *Session, db string) error {
 func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, error) {
 	th.log.Debug("test.handler.ComQuery:%v", query)
 	query = strings.ToLower(query)
+
+	th.mu.Lock()
+	th.queryCalled[query]++
+	th.mu.Unlock()
 
 	cond := th.conds[query]
 	if cond != nil {
@@ -235,6 +245,18 @@ func (th *TestHandler) AddQueryErrorPattern(queryPattern string, err error) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
 	th.patternErrors = append(th.patternErrors, exprResult{expr, nil, err})
+}
+
+// This code was derived from https://github.com/youtube/vitess.
+// GetQueryCalledNum returns how many times db executes a certain query.
+func (th *TestHandler) GetQueryCalledNum(query string) int {
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	num, ok := th.queryCalled[strings.ToLower(query)]
+	if !ok {
+		return 0
+	}
+	return num
 }
 
 func MockMysqlServer(log *xlog.Log, h Handler) (svr *Listener, err error) {

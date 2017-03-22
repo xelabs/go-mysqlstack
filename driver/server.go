@@ -12,6 +12,7 @@ package driver
 import (
 	"net"
 	"runtime"
+	"runtime/debug"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/sqldb"
@@ -117,9 +118,7 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 	defer func() {
 		conn.Close()
 		if x := recover(); x != nil {
-			buf := make([]byte, 1024)
-			buf = buf[:runtime.Stack(buf, false)]
-			log.Error("server.handle.panic:%v\n%s", x, buf)
+			log.Error("server.handle.panic:%v\n%s", x, debug.Stack())
 		}
 	}()
 	session := newSession(ID, conn)

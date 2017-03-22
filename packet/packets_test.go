@@ -10,6 +10,7 @@
 package packet
 
 import (
+	"io"
 	"testing"
 	"time"
 
@@ -329,10 +330,10 @@ func TestPacketsColumnsError(t *testing.T) {
 	}
 
 	{
-		want := "server maybe lost, error EOF (errno 1105) (sqlstate HY000)"
+		want := io.EOF
 		_, _, myerr, err := rPackets.ReadColumns()
 		assert.Nil(t, myerr)
-		got := err.Error()
+		got := err
 		assert.Equal(t, want, got)
 	}
 }

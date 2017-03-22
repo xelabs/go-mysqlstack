@@ -44,7 +44,7 @@ func NewPackets(c net.Conn) *Packets {
 func (p *Packets) Next() (v []byte, e error) {
 	pkt, err := p.stream.Read()
 	if err != nil {
-		return nil, sqldb.NewSQLError(sqldb.ER_UNKNOWN_ERROR, "server maybe lost, error %v", err)
+		return nil, err
 	}
 
 	if pkt.SequenceID != p.seq {

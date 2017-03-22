@@ -215,7 +215,7 @@ func FetchBindVar(name string, bindVariables map[string]interface{}) (val interf
 				return bv, true, nil
 			}
 
-			return nil, false, fmt.Errorf("unexpected list arg type *querypb.BindVariable(%v) for key %s", bv.Type, name)
+			return nil, false, fmt.Errorf("unexpected list arg type *querypb.BindVariable(%d) for key %s", bv.Type, name)
 		}
 
 		return nil, false, fmt.Errorf("unexpected list arg type %T for key %s", supplied, name)

@@ -83,7 +83,6 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 	if err := s.Packets.Flush(batch.Datas()); err != nil {
 		return err
 	}
-
 	return nil
 }
 
