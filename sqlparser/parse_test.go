@@ -424,6 +424,9 @@ func TestValid(t *testing.T) {
 	}, {
 		input: "select /* limit a */ 1 from t limit a",
 	}, {
+		input:  "select a from t limit 1 offset 10",
+		output: "select a from t limit 10, 1",
+	}, {
 		input: "select /* limit a,b */ 1 from t limit a, b",
 	}, {
 		input:  "select /* binary unary */ a- -b from t",

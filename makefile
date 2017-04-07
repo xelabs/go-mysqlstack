@@ -30,7 +30,7 @@ testpacket:
 testdriver:
 	go test -v ./driver
 
-COVPKGS = ./sqlparser ./common ./sqldb ./proto ./packet ./driver
+COVPKGS = ./sqlparser ./common ./sqldb ./proto ./packet ./driver ./sqlparser/depends/sqltypes
 coverage:
 	go get github.com/pierrre/gotestcover
 	gotestcover -coverprofile=coverage.out -v $(COVPKGS)
