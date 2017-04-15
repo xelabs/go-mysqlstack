@@ -109,8 +109,9 @@ func forceEOF(yylex interface{}) {
 // DDL Tokens
 %token <empty> CREATE ALTER DROP RENAME ANALYZE
 %token <empty> TABLE INDEX VIEW TO IGNORE IF UNIQUE USING
-%token <empty> SHOW DESCRIBE EXPLAIN XA
+%token <empty> SHOW DESCRIBE EXPLAIN XA PROCESSLIST
 %token <empty> PARTITION HASH
+%token <empty> KILL
 
 // Functions
 %token <empty> CURRENT_TIMESTAMP DATABASE DATABASES TABLES
@@ -122,7 +123,7 @@ func forceEOF(yylex interface{}) {
 %type <selStmt> select_statement
 %type <statement> insert_statement update_statement delete_statement set_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement
-%type <statement> analyze_statement other_statement xa_statement shard_statement usedb_statement show_statement
+%type <statement> analyze_statement other_statement xa_statement shard_statement usedb_statement show_statement kill_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op
 %type <str> distinct_opt straight_join_opt
@@ -200,6 +201,7 @@ command:
 | shard_statement
 | usedb_statement
 | show_statement
+| kill_statement
 | other_statement
 
 select_statement:
@@ -345,6 +347,18 @@ show_statement:
   {
     $$ = &ShowCreateTable{Table: $4}
   }
+| SHOW PROCESSLIST force_eof
+  {
+    $$ = &ShowProcesslist{}
+  }
+
+
+kill_statement:
+   KILL INTEGRAL force_eof
+  {
+    $$ = &Kill{ QueryID: string($2)}
+  }
+
 
 other_statement:
 DESCRIBE force_eof

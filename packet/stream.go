@@ -17,8 +17,6 @@ import (
 	"bufio"
 	"io"
 	"net"
-
-	"github.com/XeLabs/go-mysqlstack/common"
 )
 
 const (
@@ -83,18 +81,17 @@ func (s *Stream) Read() (*Packet, error) {
 
 // Write writes the packet to writer
 func (s *Stream) Write(data []byte) error {
-	buf := common.NewBuffer(64)
-	if err := s.Append(buf, data); err != nil {
+	if err := s.Append(data); err != nil {
 		return err
 	}
 
-	if err := s.Flush(buf.Datas()); err != nil {
+	if err := s.Flush(); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Stream) Append(buff *common.Buffer, data []byte) error {
+func (s *Stream) Append(data []byte) error {
 	payLen := len(data) - 4
 	sequence := data[3]
 
@@ -111,7 +108,7 @@ func (s *Stream) Append(buff *common.Buffer, data []byte) error {
 		data[3] = sequence
 
 		// append to buffer
-		buff.WriteBytes(data[:4+size])
+		s.writer.Write(data[:4+size])
 		if size < s.pktMaxSize {
 			break
 		}
@@ -123,10 +120,7 @@ func (s *Stream) Append(buff *common.Buffer, data []byte) error {
 	return nil
 }
 
-func (s *Stream) Flush(datas []byte) error {
-	if _, err := s.writer.Write(datas); err != nil {
-		return err
-	}
+func (s *Stream) Flush() error {
 	if err := s.writer.Flush(); err != nil {
 		return err
 	}

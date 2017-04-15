@@ -27,7 +27,7 @@ func TestGreetingUnPack(t *testing.T) {
 		err := got.UnPack(want.Pack())
 		assert.Nil(t, err)
 		assert.Equal(t, want, got)
-		assert.Equal(t, sqldb.SERVER_STATUS_AUTOCOMMIT, got.Status())
+		assert.Equal(t, sqldb.SERVER_STATUS_AUTOCOMMIT, int(got.Status()))
 	}
 
 	// 1. off sqldb.CLIENT_PLUGIN_AUTH

@@ -77,6 +77,5 @@ func PackERR(e *ERR) []byte {
 
 	// error msg
 	buf.WriteString(e.ErrorMessage)
-
 	return buf.Datas()
 }

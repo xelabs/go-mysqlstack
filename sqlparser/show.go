@@ -62,3 +62,19 @@ func (node *ShowCreateTable) Format(buf *TrackedBuffer) {
 func (node *ShowCreateTable) WalkSubtree(visit Visit) error {
 	return nil
 }
+
+func (*ShowProcesslist) iStatement() {}
+
+// ShowProcesslist represents a SHOW PROCESSLIST statement.
+type ShowProcesslist struct {
+}
+
+// Format formats the node.
+func (node *ShowProcesslist) Format(buf *TrackedBuffer) {
+	buf.WriteString("SHOW PROCESSLIST")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowProcesslist) WalkSubtree(visit Visit) error {
+	return nil
+}

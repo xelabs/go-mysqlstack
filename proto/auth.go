@@ -102,7 +102,6 @@ func (a *Auth) UnPack(payload []byte) error {
 	if a.pluginName != DefaultAuthPluginName {
 		return fmt.Errorf("invalid authPluginName, got %v but only support %v", a.pluginName, DefaultAuthPluginName)
 	}
-
 	return nil
 }
 
@@ -117,16 +116,6 @@ func (a *Auth) Pack(
 ) []byte {
 	buf := common.NewBuffer(256)
 	authResponse := nativePassword(password, salt)
-
-	// must always be set
-	capabilityFlags |= sqldb.CLIENT_PROTOCOL_41
-
-	// not supported
-	capabilityFlags &= ^sqldb.CLIENT_SSL
-	capabilityFlags &= ^sqldb.CLIENT_COMPRESS
-	capabilityFlags &= ^sqldb.CLIENT_DEPRECATE_EOF
-	capabilityFlags &= ^sqldb.CLIENT_CONNECT_ATTRS
-
 	if len(database) > 0 {
 		capabilityFlags |= sqldb.CLIENT_CONNECT_WITH_DB
 	} else {
@@ -171,7 +160,7 @@ func (a *Auth) Pack(
 	buf.WriteZero(1)
 
 	// CLIENT_CONNECT_ATTRS none
-
+	//
 	return buf.Datas()
 }
 
@@ -192,16 +181,18 @@ func nativePassword(password string, salt []byte) []byte {
 	// inner Hash
 	crypt.Reset()
 	crypt.Write(stage1)
-	hash := crypt.Sum(nil)
-	// outer Hash
+	stage1SHA1 := crypt.Sum(nil)
+
+	// stage2Hash = SHA1(salt <concat> SHA1(SHA1(password)))
 	crypt.Reset()
 	crypt.Write(salt)
-	crypt.Write(hash)
-	scramble := crypt.Sum(nil)
+	crypt.Write(stage1SHA1)
+	stage2 := crypt.Sum(nil)
 
-	// token = scrambleHash XOR stage1Hash
-	for i := range scramble {
-		scramble[i] ^= stage1[i]
+	// srambleHash = stage1Hash ^ stage2Hash
+	scramble := make([]byte, len(stage2))
+	for i := range stage2 {
+		scramble[i] = stage1[i] ^ stage2[i]
 	}
 	return scramble
 }

@@ -118,14 +118,27 @@ func (th *TestHandler) ResetAll() {
 	th.patternErrors = make([]exprResult, 0, 4)
 }
 
+func (th *TestHandler) ResetPatternErrors() {
+	th.patternErrors = make([]exprResult, 0, 4)
+}
+
+func (th *TestHandler) ResetErrors() {
+	for k, v := range th.conds {
+		if v.Type == COND_ERROR {
+			delete(th.conds, k)
+		}
+	}
+}
+
 // ConnectionCheck impl.
 func (th *TestHandler) SessionCheck(s *Session) error {
+	th.log.Debug("[%s].coming.db[%s].salt[%v].scramble[%v]", s.Addr(), s.Schema(), s.Salt(), s.Scramble())
 	return nil
 }
 
 // AuthCheck impl.
 func (th *TestHandler) AuthCheck(s *Session) error {
-	user := s.Auth.User()
+	user := s.User()
 	if user != "mock" {
 		return sqldb.NewSQLError(sqldb.ER_ACCESS_DENIED_ERROR, "Access denied for user '%v'", user)
 	}
@@ -136,18 +149,21 @@ func (th *TestHandler) AuthCheck(s *Session) error {
 func (th *TestHandler) NewSession(s *Session) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
-	th.ss[s.ID] = s
+	th.ss[s.ID()] = s
 }
 
 // UnRegister impl.
 func (th *TestHandler) SessionClosed(s *Session) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
-	delete(th.ss, s.ID)
+	delete(th.ss, s.ID())
 }
 
 // ComInitDB impl.
 func (th *TestHandler) ComInitDB(s *Session, db string) error {
+	if strings.HasPrefix(db, "xx") {
+		return fmt.Errorf("mock.cominit.db.error: unkonw database[%s]", db)
+	}
 	return nil
 }
 
@@ -158,9 +174,9 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 
 	th.mu.Lock()
 	th.queryCalled[query]++
+	cond := th.conds[query]
 	th.mu.Unlock()
 
-	cond := th.conds[query]
 	if cond != nil {
 		switch cond.Type {
 		case COND_DELAY:
@@ -179,10 +195,12 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 	if strings.HasPrefix(query, "kill") {
 		if id, err := strconv.ParseUint(strings.Split(query, " ")[1], 10, 32); err == nil {
 			th.log.Info("mock.to.kill.%v.session", id)
+			th.mu.Lock()
 			session := th.ss[uint32(id)]
 			if session != nil {
 				session.Close()
 			}
+			th.mu.Unlock()
 		}
 		return &sqltypes.Result{}, nil
 	}

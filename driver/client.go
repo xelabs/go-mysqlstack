@@ -22,8 +22,11 @@ import (
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
+var _ Conn = &conn{}
+
 type Conn interface {
 	Ping() error
+	Quit()
 	Close() error
 	Closed() bool
 	Cleanup()
@@ -54,35 +57,37 @@ func (c *conn) handleErrorPacket(data []byte) error {
 	return nil
 }
 
-func (c *conn) handShake(username, password, database string) (err error) {
-	var payload []byte
+func (c *conn) handShake(username, password, database string) error {
+	var err error
+	var data []byte
+
 	//Parses the initial handshake from the server.
 	{
 		// greeting read
-		if payload, err = c.packets.Next(); err != nil {
-			return
+		if data, err = c.packets.Next(); err != nil {
+			return err
 		}
 
 		// check greeting packet
-		if err = c.handleErrorPacket(payload); err != nil {
-			return
+		if err = c.handleErrorPacket(data); err != nil {
+			return err
 		}
 
 		// unpack greeting packet
-		if err = c.greeting.UnPack(payload); err != nil {
-			return
+		if err = c.greeting.UnPack(data); err != nil {
+			return err
 		}
 
 		// check greating Capability
 		if c.greeting.Capability&sqldb.CLIENT_PROTOCOL_41 == 0 {
 			err = sqldb.NewSQLError(sqldb.CR_VERSION_ERROR, "cannot connect to servers earlier than 4.1")
-			return
+			return err
 		}
 	}
 
 	{
 		// auth pack
-		payload := c.auth.Pack(
+		data := c.auth.Pack(
 			proto.DefaultClientCapability,
 			c.greeting.Charset,
 			username,
@@ -92,31 +97,32 @@ func (c *conn) handShake(username, password, database string) (err error) {
 		)
 
 		// auth write
-		if err = c.packets.Write(payload); err != nil {
-			return
+		if err = c.packets.Write(data); err != nil {
+			return err
 		}
 	}
 
 	{
 		// read
-		if payload, err = c.packets.Next(); err != nil {
-			return
+		if data, err = c.packets.Next(); err != nil {
+			return err
 		}
 
-		if err = c.handleErrorPacket(payload); err != nil {
-			return
+		if err = c.handleErrorPacket(data); err != nil {
+			return err
 		}
 	}
-	return
+	return nil
 }
 
 // NewConn used to create a new client connection.
 // The timeout is 30 seconds.
-func NewConn(username, password, address, database string) (c *conn, err error) {
-	c = &conn{}
+func NewConn(username, password, address, database string) (*conn, error) {
+	var err error
+	c := &conn{}
 	timeout := time.Duration(30) * time.Second
 	if c.netConn, err = net.DialTimeout("tcp", address, timeout); err != nil {
-		return
+		return nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -132,15 +138,16 @@ func NewConn(username, password, address, database string) (c *conn, err error) 
 	c.greeting = proto.NewGreeting(0)
 	c.packets = packet.NewPackets(c.netConn)
 	if err = c.handShake(username, password, database); err != nil {
-		return
+		return nil, err
 	}
 	return c, nil
 }
 
 func (c *conn) query(command byte, sql string) (Rows, error) {
 	var ok *proto.OK
+	var myerr, err error
 	var columns []*querypb.Field
-	var err, myerr error
+	var colNumber int
 
 	// if err != nil means the connection is broken(packet error)
 	defer func() {
@@ -149,26 +156,36 @@ func (c *conn) query(command byte, sql string) (Rows, error) {
 		}
 	}()
 
-	// query
+	// Query.
 	if err = c.packets.WriteCommand(command, common.StringToBytes(sql)); err != nil {
 		return nil, err
 	}
 
-	// columns
-	columns, ok, myerr, err = c.packets.ReadColumns()
+	// Read column number.
+	ok, colNumber, myerr, err = c.packets.ReadComQueryResponse()
 	if err != nil {
 		return nil, err
 	}
 	if myerr != nil {
-		// just return the mysql error, but not close the connection
 		return nil, myerr
 	}
 
+	if colNumber > 0 {
+		if columns, err = c.packets.ReadColumns(colNumber); err != nil {
+			return nil, err
+		}
+
+		// Read EOF.
+		if (c.greeting.Capability & sqldb.CLIENT_DEPRECATE_EOF) == 0 {
+			if err = c.packets.ReadEOF(); err != nil {
+				return nil, err
+			}
+		}
+	}
 	rows := NewTextRows(c)
 	rows.rowsAffected = ok.AffectedRows
 	rows.insertID = ok.LastInsertID
 	rows.fields = columns
-
 	return rows, nil
 }
 
@@ -244,6 +261,9 @@ func (c *conn) FetchAll(sql string, maxrows int) (*sqltypes.Result, error) {
 		}
 		r.Rows = append(r.Rows, row)
 	}
+	if len(r.Rows) > 0 {
+		r.RowsAffected = uint64(len(r.Rows))
+	}
 
 	// Check last error
 	if err := rows.Close(); err != nil {
@@ -258,8 +278,25 @@ func (c *conn) NextPacket() ([]byte, error) {
 	return c.packets.Next()
 }
 
+func (c *conn) Command(command byte) error {
+	rows, err := c.query(command, "")
+	if err != nil {
+		return err
+	}
+
+	if err := rows.Close(); err != nil {
+		c.Cleanup()
+	}
+	return nil
+}
+
+func (c *conn) Quit() {
+	c.packets.WriteCommand(sqldb.COM_QUIT, nil)
+}
+
 func (c *conn) Cleanup() {
 	if c.netConn != nil {
+		c.Quit()
 		c.netConn.Close()
 		c.netConn = nil
 	}
@@ -267,7 +304,7 @@ func (c *conn) Cleanup() {
 
 // Close closes the connection
 func (c *conn) Close() error {
-	if c.netConn != nil {
+	if c != nil && c.netConn != nil {
 		c.Cleanup()
 	}
 	return nil

@@ -40,8 +40,8 @@ func NewPackets(c net.Conn) *Packets {
 	}
 }
 
-// Read reads packet from stream
-func (p *Packets) Next() (v []byte, e error) {
+// Read reads packet from the stream buffer.
+func (p *Packets) Next() ([]byte, error) {
 	pkt, err := p.stream.Read()
 	if err != nil {
 		return nil, err
@@ -51,12 +51,11 @@ func (p *Packets) Next() (v []byte, e error) {
 		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "pkt.read.seq[%v]!=pkt.actual.seq[%v]", pkt.SequenceID, p.seq)
 	}
 	p.seq++
-
 	return pkt.Datas, nil
 }
 
-// Write writes the packet to stream
-// It packs as:
+// Write writes the packet to the wire.
+// It packed as:
 // [header]
 // [payload]
 func (p *Packets) Write(payload []byte) error {
@@ -75,11 +74,10 @@ func (p *Packets) Write(payload []byte) error {
 		return err
 	}
 	p.seq++
-
 	return nil
 }
 
-// WriteCommand writes a command packet to stream
+// WriteCommand writes a command packet to the wire.
 func (p *Packets) WriteCommand(command byte, payload []byte) error {
 	// reset packet sequence
 	p.seq = 0
@@ -102,13 +100,54 @@ func (p *Packets) WriteCommand(command byte, payload []byte) error {
 		return err
 	}
 	p.seq++
+	return nil
+}
 
+// ResetSeq reset sequence to zero.
+func (p *Packets) ResetSeq() {
+	p.seq = 0
+}
+
+// ParseOK used to parse the OK packet.
+func (p *Packets) ParseOK(data []byte) (*proto.OK, error) {
+	return proto.UnPackOK(data)
+}
+
+// WriteOK writes OK packet to the wire.
+func (p *Packets) WriteOK(affectedRows, lastInsertID uint64, flags uint16, warnings uint16) error {
+	ok := &proto.OK{
+		AffectedRows: affectedRows,
+		LastInsertID: lastInsertID,
+		StatusFlags:  flags,
+		Warnings:     warnings,
+	}
+	if err := p.Write(proto.PackOK(ok)); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ParseERR used to parse the ERR packet.
+func (p *Packets) ParseERR(data []byte) error {
+	return proto.UnPackERR(data)
+}
+
+// WriteERR writes ERR packet to the wire.
+func (p *Packets) WriteERR(errorCode uint16, sqlState string, format string, args ...interface{}) error {
+	e := &proto.ERR{
+		ErrorCode:    errorCode,
+		SQLState:     sqlState,
+		ErrorMessage: fmt.Sprintf(format, args...),
+	}
+	if err := p.Write(proto.PackERR(e)); err != nil {
+		return err
+	}
 	return nil
 }
 
 // Append appends packets to buffer but not write to stream
 // NOTICE: SequenceID++
-func (p *Packets) Append(buff *common.Buffer, rawdata []byte) error {
+func (p *Packets) Append(rawdata []byte) error {
 	pkt := common.NewBuffer(128)
 
 	// body length(24bits):
@@ -120,102 +159,59 @@ func (p *Packets) Append(buff *common.Buffer, rawdata []byte) error {
 
 	// body
 	pkt.WriteBytes(rawdata)
-	if err := p.stream.Append(buff, pkt.Datas()); err != nil {
+	if err := p.stream.Append(pkt.Datas()); err != nil {
 		return err
 	}
 	p.seq++
-
 	return nil
 }
 
-// AppendEOF appends EOF packet to buff
-func (p *Packets) AppendEOF(buff *common.Buffer) error {
-	return p.Append(buff, []byte{proto.EOF_PACKET})
-}
-
-// Flush writes all append-packets to stream
-func (p *Packets) Flush(packets []byte) error {
-	return p.stream.Flush(packets)
-}
-
-// ResetSeq reset sequence to zero
-func (p *Packets) ResetSeq() {
-	p.seq = 0
-}
-
-func (p *Packets) ParseERR(data []byte) error {
-	return proto.UnPackERR(data)
-}
-
-func (p *Packets) ParseOK(data []byte) (*proto.OK, error) {
-	return proto.UnPackOK(data)
-}
-
-// ReadColumns parses columns info
-// http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::Resultset
-// If myerr is not nil, we dont close the connection.
-// if err is not nil, we(the client) will close the connection.
-func (p *Packets) ReadColumns() ([]*querypb.Field, *proto.OK, error, error) {
-	var err error
-	var count uint64
-	var payload []byte
-
-	if payload, err = p.Next(); err != nil {
-		return nil, nil, nil, err
-	}
-
-	ok := &proto.OK{}
-	switch payload[0] {
-	case proto.OK_PACKET:
-		// maybe we are OK response, such as Exec response
-		if ok, err = p.ParseOK(payload); err != nil {
-			return nil, nil, nil, err
-		}
-		return nil, ok, nil, nil
-
-	case proto.ERR_PACKET:
-		return nil, nil, p.ParseERR(payload), nil
-	}
-
-	// column count
-	if count, err = proto.ColumnCount(payload); err != nil {
-		return nil, nil, nil, err
-	}
-
-	// column info
-	columns := make([]*querypb.Field, 0, count)
-	for i := 0; i < int(count); i++ {
-		if payload, err = p.Next(); err != nil {
-			return nil, nil, nil, err
-		}
-
-		column, err := proto.UnpackColumn(payload)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		columns = append(columns, column)
-	}
-
+// ReadEOF used to read the EOF packet.
+func (p *Packets) ReadEOF() error {
 	// EOF packet
-	if payload, err = p.Next(); err != nil {
-		return nil, nil, nil, err
-	} else {
-		if payload[0] != proto.EOF_PACKET {
-			return nil, nil, nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "read.columns.EOF.error.columns[%+v]", columns)
-		}
+	data, err := p.Next()
+	if err != nil {
+		return err
 	}
-	return columns, ok, nil, nil
+	switch data[0] {
+	case proto.EOF_PACKET:
+		return nil
+	case proto.ERR_PACKET:
+		return p.ParseERR(data)
+	default:
+		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "unexpected.eof.packet[%+v]", data)
+	}
 }
 
-// WriteColumns writes columns packet to stream
-func (p *Packets) WriteColumns(columns []*querypb.Field) error {
-	batch := common.NewBuffer(128)
+// AppendEOF appends EOF packet to the stream buffer.
+func (p *Packets) AppendEOF() error {
+	return p.Append([]byte{proto.EOF_PACKET})
+}
 
+// AppendOKWithEOFHeader appends OK packet to the stream buffer with EOF header.
+func (p *Packets) AppendOKWithEOFHeader(affectedRows, lastInsertID uint64, flags uint16, warnings uint16) error {
+	ok := &proto.OK{
+		AffectedRows: affectedRows,
+		LastInsertID: lastInsertID,
+		StatusFlags:  flags,
+		Warnings:     warnings,
+	}
+	buf := common.NewBuffer(64)
+	buf.WriteU8(proto.EOF_PACKET)
+	buf.WriteBytes(proto.PackOK(ok))
+	if err := p.Append(buf.Datas()); err != nil {
+		return err
+	}
+	return nil
+}
+
+// WriteColumns writes columns packet to the stream buffer.
+func (p *Packets) AppendColumns(columns []*querypb.Field) error {
 	// column count
 	count := len(columns)
 	buf := common.NewBuffer(64)
 	buf.WriteLenEncode(uint64(count))
-	if err := p.Append(batch, buf.Datas()); err != nil {
+	if err := p.Append(buf.Datas()); err != nil {
 		return err
 	}
 
@@ -223,47 +219,71 @@ func (p *Packets) WriteColumns(columns []*querypb.Field) error {
 	for i := 0; i < count; i++ {
 		buf := common.NewBuffer(64)
 		buf.WriteBytes(proto.PackColumn(columns[i]))
-		if err := p.Append(batch, buf.Datas()); err != nil {
+		if err := p.Append(buf.Datas()); err != nil {
 			return err
 		}
 	}
-	// EOF
-	if err := p.AppendEOF(batch); err != nil {
-		return err
-	}
-
-	// write to stream
-	if err := p.Flush(batch.Datas()); err != nil {
-		return err
-	}
-
 	return nil
 }
 
-func (p *Packets) WriteOK(affectedRows, lastInsertID uint64, flags uint16, warnings uint16) error {
-	ok := &proto.OK{
-		AffectedRows: affectedRows,
-		LastInsertID: lastInsertID,
-		StatusFlags:  flags,
-		Warnings:     warnings,
-	}
-
-	if err := p.Write(proto.PackOK(ok)); err != nil {
-		return err
-	}
-
-	return nil
+// Flush writes all append-packets to the wire.
+func (p *Packets) Flush() error {
+	return p.stream.Flush()
 }
 
-func (p *Packets) WriteERR(errorCode uint16, sqlState string, format string, args ...interface{}) error {
-	e := &proto.ERR{
-		ErrorCode:    errorCode,
-		SQLState:     sqlState,
-		ErrorMessage: fmt.Sprintf(format, args...),
-	}
-	if err := p.Write(proto.PackERR(e)); err != nil {
-		return err
+// ReadComQueryResponse used to read query command response and parse the column count.
+// http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::Resultset
+// Returns:
+// ok, colNumbs, myerr, err
+//
+// myerr is the error who was send by MySQL server, the client does not close the connection.
+// if err is not nil, we(the client) will close the connection.
+func (p *Packets) ReadComQueryResponse() (*proto.OK, int, error, error) {
+	var err error
+	var data []byte
+	var numbers uint64
+
+	if data, err = p.Next(); err != nil {
+		return nil, 0, nil, err
 	}
 
-	return nil
+	ok := &proto.OK{}
+	switch data[0] {
+	case proto.OK_PACKET:
+		// OK.
+		if ok, err = p.ParseOK(data); err != nil {
+			return nil, 0, nil, err
+		}
+		return ok, 0, nil, nil
+	case proto.ERR_PACKET:
+		return nil, 0, p.ParseERR(data), nil
+	case 0xfb:
+		// Local infile
+		return nil, 0, sqldb.NewSQLError(sqldb.ER_UNKNOWN_ERROR, "Local.infile.not.implemented"), nil
+	}
+	// column count
+	if numbers, err = proto.ColumnCount(data); err != nil {
+		return nil, 0, nil, err
+	}
+	return ok, int(numbers), nil, nil
+}
+
+// ReadColumns used to read all columns from the stream buffer.
+func (p *Packets) ReadColumns(colNumber int) ([]*querypb.Field, error) {
+	var err error
+	var data []byte
+
+	// column info
+	columns := make([]*querypb.Field, 0, colNumber)
+	for i := 0; i < colNumber; i++ {
+		if data, err = p.Next(); err != nil {
+			return nil, err
+		}
+		column, err := proto.UnpackColumn(data)
+		if err != nil {
+			return nil, err
+		}
+		columns = append(columns, column)
+	}
+	return columns, nil
 }

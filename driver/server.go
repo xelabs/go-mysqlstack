@@ -118,10 +118,10 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 	defer func() {
 		conn.Close()
 		if x := recover(); x != nil {
-			log.Error("server.handle.panic:%v\n%s", x, debug.Stack())
+			log.Error("server.handle.panic:\n%v\n%s", x, debug.Stack())
 		}
 	}()
-	session := newSession(ID, conn)
+	session := newSession(log, ID, conn)
 	// Session check.
 	if err = l.handler.SessionCheck(session); err != nil {
 		log.Warning("session[%v].check.failed.error:%+v", ID, err)
@@ -134,50 +134,49 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 	defer l.handler.SessionClosed(session)
 
 	// Greeting packet.
-	greetingPkt = session.Greeting.Pack()
-	if err = session.Packets.Write(greetingPkt); err != nil {
+	greetingPkt = session.greeting.Pack()
+	if err = session.packets.Write(greetingPkt); err != nil {
 		log.Error("server.write.greeting.packet.error: %v", err)
 		return
 	}
 
 	// Auth packet.
-	if authPkt, err = session.Packets.Next(); err != nil {
+	if authPkt, err = session.packets.Next(); err != nil {
 		log.Error("server.read.auth.packet.error: %v", err)
 		return
 	}
-	if err = session.Auth.UnPack(authPkt); err != nil {
+	if err = session.auth.UnPack(authPkt); err != nil {
 		log.Error("server.unpack.auth.error: %v", err)
 		return
 	}
 
-	//  Auth check.
-	if err = l.handler.AuthCheck(session); err != nil {
-		log.Warning("server.user[%+v].auth.check.failed", session.Auth.User())
-		session.writeErrFromError(err)
-		return
-	} else {
-		if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
-			return
-		}
-	}
-
 	// Check the database.
-	db := session.Auth.Database()
+	db := session.auth.Database()
 	if db != "" {
 		if err = l.handler.ComInitDB(session, db); err != nil {
-			log.Error("server.cominitdb.error: %+v", err)
 			if werr := session.writeErrFromError(err); werr != nil {
 				return
 			}
 			return
 		}
-		session.Schema = db
+		session.SetSchema(db)
+	}
+
+	//  Auth check.
+	if err = l.handler.AuthCheck(session); err != nil {
+		log.Warning("server.user[%+v].auth.check.failed", session.User())
+		session.writeErrFromError(err)
+		return
+	} else {
+		if err = session.packets.WriteOK(0, 0, session.greeting.Status(), 0); err != nil {
+			return
+		}
 	}
 
 	for {
 		// Reset packet sequence ID.
-		session.Packets.ResetSeq()
-		if data, err = session.Packets.Next(); err != nil {
+		session.packets.ResetSeq()
+		if data, err = session.packets.Next(); err != nil {
 			return
 		}
 
@@ -192,13 +191,13 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 					return
 				}
 			} else {
-				session.Schema = db
-				if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
+				session.SetSchema(db)
+				if err = session.packets.WriteOK(0, 0, session.greeting.Status(), 0); err != nil {
 					return
 				}
 			}
 		case sqldb.COM_PING:
-			if err = session.Packets.WriteOK(0, 0, session.Greeting.Status(), 0); err != nil {
+			if err = session.packets.WriteOK(0, 0, session.greeting.Status(), 0); err != nil {
 				return
 			}
 		case sqldb.COM_QUERY:
@@ -223,7 +222,7 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 			}
 		}
 		// Reset packet sequence ID.
-		session.Packets.ResetSeq()
+		session.packets.ResetSeq()
 	}
 }
 

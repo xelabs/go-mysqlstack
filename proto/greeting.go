@@ -52,7 +52,6 @@ func NewGreeting(connectionID uint32) *Greeting {
 	if _, err := rand.Read(greeting.Salt); err != nil {
 		greeting.Salt = DefaultSalt
 	}
-
 	return greeting
 }
 
@@ -110,7 +109,6 @@ func (g *Greeting) Pack() []byte {
 	pluginName := "mysql_native_password"
 	buf.WriteString(pluginName)
 	buf.WriteZero(1)
-
 	return buf.Datas()
 }
 

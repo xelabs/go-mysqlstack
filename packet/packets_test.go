@@ -139,50 +139,6 @@ func TestPacketsWrite(t *testing.T) {
 	}
 }
 
-func TestPacketsBatchWrite(t *testing.T) {
-	conn := NewMockConn()
-	defer conn.Close()
-
-	buff := common.NewBuffer(64)
-	batch := common.NewBuffer(64)
-	packets := NewPackets(conn)
-	bodys := [][]byte{
-		[]byte{0x01, 0x11, 0x12},
-		[]byte{0x02, 0x21, 0x22},
-		[]byte{0x03, 0x31, 0x32},
-		[]byte{0x04, 0x41, 0x42},
-	}
-
-	// batch write
-	{
-		for _, body := range bodys {
-			buff.WriteBytes(body)
-			err := packets.Append(batch, body)
-			assert.Nil(t, err)
-		}
-
-		// commit
-		{
-			err := packets.Flush(batch.Datas())
-			assert.Nil(t, err)
-			want := batch.Datas()
-			got := conn.Datas()
-			assert.Equal(t, want, got)
-		}
-	}
-
-	// batch read
-	{
-		read := NewPackets(conn)
-
-		for _, want := range bodys {
-			got, err := read.Next()
-			assert.Nil(t, err)
-			assert.Equal(t, want, got)
-		}
-	}
-}
-
 func TestPacketsWriteCommand(t *testing.T) {
 	conn := NewMockConn()
 	defer conn.Close()
@@ -238,14 +194,17 @@ func TestPacketsColumns(t *testing.T) {
 	}
 
 	{
-		err := wPackets.WriteColumns(columns)
+		err := wPackets.AppendColumns(columns)
 		assert.Nil(t, err)
+		wPackets.Flush()
 	}
 
 	{
-		cols, _, _, err := rPackets.ReadColumns()
+		_, nums, _, err := rPackets.ReadComQueryResponse()
 		assert.Nil(t, err)
-		assert.Equal(t, columns, cols)
+		got, err := rPackets.ReadColumns(nums)
+		assert.Nil(t, err)
+		assert.Equal(t, columns, got)
 	}
 }
 
@@ -279,8 +238,9 @@ func TestPacketsColumnsOK(t *testing.T) {
 		want.StatusFlags = 1
 		want.Warnings = 2
 
-		_, got, _, err := rPackets.ReadColumns()
+		got, nums, _, err := rPackets.ReadComQueryResponse()
 		assert.Nil(t, err)
+		assert.Equal(t, 0, nums)
 		assert.Equal(t, want, got)
 	}
 }
@@ -308,7 +268,7 @@ func TestPacketsColumnsERR(t *testing.T) {
 
 	{
 		want := "ERROR (errno 1) (sqlstate ABCDE)"
-		_, _, myerr, _ := rPackets.ReadColumns()
+		_, _, myerr, _ := rPackets.ReadComQueryResponse()
 		got := myerr.Error()
 		assert.Equal(t, want, got)
 	}
@@ -331,8 +291,9 @@ func TestPacketsColumnsError(t *testing.T) {
 
 	{
 		want := io.EOF
-		_, _, myerr, err := rPackets.ReadColumns()
-		assert.Nil(t, myerr)
+		_, nums, _, err := rPackets.ReadComQueryResponse()
+		assert.Nil(t, err)
+		_, err = rPackets.ReadColumns(nums)
 		got := err
 		assert.Equal(t, want, got)
 	}
@@ -362,4 +323,31 @@ func TestPacketsWriteError(t *testing.T) {
 	wPackets := NewPackets(conn)
 	err := wPackets.WriteERR(1, "YH000", "err:%v", "unknow")
 	assert.Nil(t, err)
+}
+
+func TestPacketsEOF(t *testing.T) {
+	conn := NewMockConn()
+	defer conn.Close()
+
+	wPackets := NewPackets(conn)
+	rPackets := NewPackets(conn)
+	// EOF
+	{
+		err := wPackets.AppendEOF()
+		assert.Nil(t, err)
+		wPackets.Flush()
+
+		err = rPackets.ReadEOF()
+		assert.Nil(t, err)
+	}
+
+	// OK with EOF header.
+	{
+		err := wPackets.AppendOKWithEOFHeader(1, 1, 1, 1)
+		assert.Nil(t, err)
+		wPackets.Flush()
+
+		err = rPackets.ReadEOF()
+		assert.Nil(t, err)
+	}
 }

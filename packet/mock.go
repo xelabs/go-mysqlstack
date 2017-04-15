@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+var _ net.Conn = &MockConn{}
+
 // struct to mock a net.Conn for testing purposes
 type MockConn struct {
 	laddr   net.Addr
@@ -78,6 +80,3 @@ func (m *MockConn) SetReadDeadline(t time.Time) error {
 func (m *MockConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
-
-// make sure mockConn implements the net.Conn interface
-var _ net.Conn = new(MockConn)

@@ -22,6 +22,7 @@ import (
 
 func TestServer(t *testing.T) {
 	result1 := &sqltypes.Result{
+		RowsAffected: 2,
 		Fields: []*querypb.Field{
 			{
 				Name: "id",
@@ -153,7 +154,7 @@ func TestServer(t *testing.T) {
 	{
 		client, err := NewConn("mock", "mock", address, "test")
 		assert.Nil(t, err)
-		err = client.InitDB("fxk")
+		err = client.InitDB("test")
 		assert.Nil(t, err)
 	}
 
@@ -190,5 +191,43 @@ func TestServerSessionClose(t *testing.T) {
 		assert.Nil(t, err)
 		_, err = client2.Query("KILL 1")
 		assert.Nil(t, err)
+	}
+}
+
+func TestServerComInitDB(t *testing.T) {
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	svr, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	defer svr.Close()
+	address := svr.Addr()
+
+	// query
+	{
+		client, err := NewConn("mock", "mock", address, "xxtest")
+		defer client.Close()
+		want := "mock.cominit.db.error: unkonw database[xxtest] (errno 1105) (sqlstate HY000)"
+		got := err.Error()
+		assert.Equal(t, want, got)
+	}
+}
+
+func TestServerUnsupportedCommand(t *testing.T) {
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	svr, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	defer svr.Close()
+	address := svr.Addr()
+
+	// query
+	{
+		client, err := NewConn("mock", "mock", address, "")
+		assert.Nil(t, err)
+		defer client.Close()
+		err = client.Command(sqldb.COM_SLEEP)
+		want := "command handling not implemented yet: COM_SLEEP (errno 1105) (sqlstate HY000)"
+		got := err.Error()
+		assert.Equal(t, want, got)
 	}
 }

@@ -103,7 +103,7 @@ func UnpackColumn(payload []byte) (*querypb.Field, error) {
 	field.Decimals = uint32(decimals)
 
 	// 2 Filler and Default Values is ignored
-
+	//
 	return field, nil
 }
 
@@ -153,6 +153,5 @@ func PackColumn(field *querypb.Field) []byte {
 
 	// 2 filler [00] [00]
 	buf.WriteU16(uint16(0))
-
 	return buf.Datas()
 }

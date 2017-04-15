@@ -886,6 +886,33 @@ func TestShow(t *testing.T) {
 	}, {
 		input:  "show create table test.t1",
 		output: "SHOW CREATE TABLE test.t1",
+	}, {
+		input:  "show processlist",
+		output: "SHOW PROCESSLIST",
+	}}
+	for _, tcase := range sqls {
+		if tcase.output == "" {
+			tcase.output = tcase.input
+		}
+		tree, err := Parse(tcase.input)
+		if err != nil {
+			t.Errorf("input: %s, err: %v", tcase.input, err)
+			continue
+		}
+		out := String(tree)
+		if out != tcase.output {
+			t.Errorf("out: %s, want %s", out, tcase.output)
+		}
+	}
+}
+
+func TestKill(t *testing.T) {
+	sqls := []struct {
+		input  string
+		output string
+	}{{
+		input:  "kill 6",
+		output: "kill 6",
 	}}
 	for _, tcase := range sqls {
 		if tcase.output == "" {

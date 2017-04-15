@@ -19,6 +19,8 @@ import (
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
+var _ Rows = &TextRows{}
+
 type Rows interface {
 	Next() bool
 	Close() error
@@ -34,7 +36,7 @@ type TextRows struct {
 	c            Conn
 	end          bool
 	err          error
-	payload      []byte
+	data         []byte
 	rowsAffected uint64
 	insertID     uint64
 	buffer       *common.Buffer
@@ -67,23 +69,26 @@ func (r *TextRows) Next() bool {
 		return false
 	}
 
-	if r.payload, r.err = r.c.NextPacket(); r.err != nil {
+	if r.data, r.err = r.c.NextPacket(); r.err != nil {
 		r.end = true
 		return false
 	}
 
-	switch r.payload[0] {
+	switch r.data[0] {
 	case proto.EOF_PACKET:
+		// This packet may be one of two kinds:
+		// - an EOF packet,
+		// - an OK packet with an EOF header if
+		// sqldb.CLIENT_DEPRECATE_EOF is set.
 		r.end = true
 		return false
 
 	case proto.ERR_PACKET:
-		r.err = proto.UnPackERR(r.payload)
+		r.err = proto.UnPackERR(r.data)
 		r.end = true
 		return false
 	}
-	r.buffer.Reset(r.payload)
-
+	r.buffer.Reset(r.data)
 	return true
 }
 

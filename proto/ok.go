@@ -79,6 +79,5 @@ func PackOK(o *OK) []byte {
 
 	// warnings
 	buf.WriteU16(o.Warnings)
-
 	return buf.Datas()
 }
