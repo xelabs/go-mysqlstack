@@ -574,9 +574,6 @@ func TestValid(t *testing.T) {
 		input:  "describe foobar",
 		output: "other",
 	}, {
-		input:  "explain foobar",
-		output: "other",
-	}, {
 		input: "select /* EQ true */ 1 from t where a = true",
 	}, {
 		input: "select /* EQ false */ 1 from t where a = false",
@@ -913,6 +910,30 @@ func TestKill(t *testing.T) {
 	}{{
 		input:  "kill 6",
 		output: "kill 6",
+	}}
+	for _, tcase := range sqls {
+		if tcase.output == "" {
+			tcase.output = tcase.input
+		}
+		tree, err := Parse(tcase.input)
+		if err != nil {
+			t.Errorf("input: %s, err: %v", tcase.input, err)
+			continue
+		}
+		out := String(tree)
+		if out != tcase.output {
+			t.Errorf("out: %s, want %s", out, tcase.output)
+		}
+	}
+}
+
+func TestExplain(t *testing.T) {
+	sqls := []struct {
+		input  string
+		output string
+	}{{
+		input:  "explain select * from xx",
+		output: "explain",
 	}}
 	for _, tcase := range sqls {
 		if tcase.output == "" {

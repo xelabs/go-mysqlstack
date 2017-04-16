@@ -101,35 +101,35 @@ func (t *Log) Debug(format string, v ...interface{}) {
 	if DEBUG < t.opts.Level {
 		return
 	}
-	t.log("[DEBUG] %s", fmt.Sprintf(format, v...))
+	t.log("\t  [DEBUG]  \t%s", fmt.Sprintf(format, v...))
 }
 
 func (t *Log) Info(format string, v ...interface{}) {
 	if INFO < t.opts.Level {
 		return
 	}
-	t.log("[INFO] %s", fmt.Sprintf(format, v...))
+	t.log("\t  [INFO]  \t%s", fmt.Sprintf(format, v...))
 }
 
 func (t *Log) Warning(format string, v ...interface{}) {
 	if WARNING < t.opts.Level {
 		return
 	}
-	t.log("[WARNING] %s", fmt.Sprintf(format, v...))
+	t.log("\t  [WARNING]  \t%s", fmt.Sprintf(format, v...))
 }
 
 func (t *Log) Error(format string, v ...interface{}) {
 	if ERROR < t.opts.Level {
 		return
 	}
-	t.log("[ERROR] %s", fmt.Sprintf(format, v...))
+	t.log("\t  [ERROR]  \t%s", fmt.Sprintf(format, v...))
 }
 
 func (t *Log) Fatal(format string, v ...interface{}) {
 	if FATAL < t.opts.Level {
 		return
 	}
-	t.log("[FATAL+EXIT] %s", fmt.Sprintf(format, v...))
+	t.log("\t  [FATAL+EXIT]  \t%s", fmt.Sprintf(format, v...))
 	os.Exit(1)
 }
 
@@ -137,7 +137,7 @@ func (t *Log) Panic(format string, v ...interface{}) {
 	if PANIC < t.opts.Level {
 		return
 	}
-	msg := fmt.Sprintf("[PANIC] %s", fmt.Sprintf(format, v...))
+	msg := fmt.Sprintf("\t  [PANIC]  \t %s", fmt.Sprintf(format, v...))
 	t.log(msg)
 	panic(msg)
 }

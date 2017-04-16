@@ -123,7 +123,7 @@ func forceEOF(yylex interface{}) {
 %type <selStmt> select_statement
 %type <statement> insert_statement update_statement delete_statement set_statement
 %type <statement> create_statement alter_statement rename_statement drop_statement
-%type <statement> analyze_statement other_statement xa_statement shard_statement usedb_statement show_statement kill_statement
+%type <statement> analyze_statement other_statement xa_statement shard_statement usedb_statement show_statement kill_statement explain_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op
 %type <str> distinct_opt straight_join_opt
@@ -202,6 +202,7 @@ command:
 | usedb_statement
 | show_statement
 | kill_statement
+| explain_statement
 | other_statement
 
 select_statement:
@@ -352,20 +353,20 @@ show_statement:
     $$ = &ShowProcesslist{}
   }
 
-
 kill_statement:
-   KILL INTEGRAL force_eof
+  KILL INTEGRAL force_eof
   {
     $$ = &Kill{ QueryID: string($2)}
   }
 
+explain_statement:
+  EXPLAIN force_eof
+  {
+    $$ = &Explain{}
+  }
 
 other_statement:
 DESCRIBE force_eof
-  {
-    $$ = &Other{}
-  }
-| EXPLAIN force_eof
   {
     $$ = &Other{}
   }

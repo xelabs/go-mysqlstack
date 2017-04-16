@@ -10,10 +10,12 @@
 package driver
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 	"github.com/XeLabs/go-mysqlstack/xlog"
 )
@@ -81,6 +83,58 @@ func TestClientClosed(t *testing.T) {
 		assert.NotNil(t, err)
 		want := true
 		got := client1.Closed()
+		assert.Equal(t, want, got)
+	}
+}
+
+func TestClientFetchAllWithFunc(t *testing.T) {
+	result1 := &sqltypes.Result{
+		Fields: []*querypb.Field{
+			{
+				Name: "id",
+				Type: querypb.Type_INT32,
+			},
+			{
+				Name: "name",
+				Type: querypb.Type_VARCHAR,
+			},
+		},
+		Rows: [][]sqltypes.Value{
+			{
+				sqltypes.MakeTrusted(querypb.Type_INT32, []byte("10")),
+				sqltypes.MakeTrusted(querypb.Type_VARCHAR, []byte("nice name")),
+			},
+			{
+				sqltypes.MakeTrusted(querypb.Type_INT32, []byte("20")),
+				sqltypes.NULL,
+			},
+		},
+	}
+
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	svr, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	defer svr.Close()
+	address := svr.Addr()
+
+	// query
+	{
+
+		client, err := NewConn("mock", "mock", address, "test")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		th.AddQuery("SELECT2", result1)
+		checkFunc := func(rows Rows) error {
+			if rows.Bytes() > 2 {
+				return errors.New("client.checkFunc.error")
+			}
+			return nil
+		}
+		_, err = client.FetchAllWithFunc("SELECT2", -1, checkFunc)
+		want := "client.checkFunc.error"
+		got := err.Error()
 		assert.Equal(t, want, got)
 	}
 }

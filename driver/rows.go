@@ -21,10 +21,12 @@ import (
 
 var _ Rows = &TextRows{}
 
+// Rows presents row cursor interface.
 type Rows interface {
 	Next() bool
 	Close() error
 	Datas() []byte
+	Bytes() int
 	RowsAffected() uint64
 	LastInsertID() uint64
 	LastError() error
@@ -37,6 +39,7 @@ type TextRows struct {
 	end          bool
 	err          error
 	data         []byte
+	bytes        int
 	rowsAffected uint64
 	insertID     uint64
 	buffer       *common.Buffer
@@ -63,7 +66,7 @@ func (r *TextRows) Next() bool {
 	}
 
 	// if fields count is 0
-	// the packet is OK-Packet without Resultset
+	// the packet is OK-Packet without Resultset.
 	if len(r.fields) == 0 {
 		r.end = true
 		return false
@@ -92,14 +95,13 @@ func (r *TextRows) Next() bool {
 	return true
 }
 
-// Close drain the rest packets and check the error
+// Close drain the rest packets and check the error.
 func (r *TextRows) Close() error {
 	for r.Next() {
 	}
 	if err := r.LastError(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -117,12 +119,13 @@ func (r *TextRows) RowValues() ([]sqltypes.Value, error) {
 			r.c.Cleanup()
 			return nil, err
 		}
+		r.bytes += len(v)
+
 		// if v is NIL, it's a NULL column
 		if v != nil {
 			result[i] = sqltypes.MakeTrusted(r.fields[i].Type, v)
 		}
 	}
-
 	return result, nil
 }
 
@@ -132,6 +135,11 @@ func (r *TextRows) Datas() []byte {
 
 func (r *TextRows) Fields() []*querypb.Field {
 	return r.fields
+}
+
+// Bytes returns all the memory usage which read by this row cursor.
+func (r *TextRows) Bytes() int {
+	return r.bytes
 }
 
 func (r *TextRows) RowsAffected() uint64 {

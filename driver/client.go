@@ -30,17 +30,20 @@ type Conn interface {
 	Close() error
 	Closed() bool
 	Cleanup()
-
-	// ConnectionID is the connection id at greeting
-	ConnectionID() uint32
 	NextPacket() ([]byte, error)
 
-	// Query gets the row iterator
+	// ConnectionID is the connection id at greeting.
+	ConnectionID() uint32
+
+	// Query get the row cursor.
 	Query(sql string) (Rows, error)
 	Exec(sql string) error
 
-	// FetchAll fetchs all results
+	// FetchAll fetchs all results.
 	FetchAll(sql string, maxrows int) (*sqltypes.Result, error)
+
+	// FetchAllWithFunc fetchs all results but the row cursor can be interrupted by the fn.
+	FetchAllWithFunc(sql string, maxrows int, fn Func) (*sqltypes.Result, error)
 }
 
 type conn struct {
@@ -238,39 +241,52 @@ func (c *conn) Exec(sql string) error {
 }
 
 func (c *conn) FetchAll(sql string, maxrows int) (*sqltypes.Result, error) {
-	var r *sqltypes.Result
+	return c.FetchAllWithFunc(sql, maxrows, func(rows Rows) error { return nil })
+}
 
-	rows, err := c.query(sqldb.COM_QUERY, sql)
-	if err != nil {
+// Func calls on every rows.Next.
+// If func returns error, the row.Next() is interrupted and the error is return.
+type Func func(rows Rows) error
+
+func (c *conn) FetchAllWithFunc(sql string, maxrows int, fn Func) (*sqltypes.Result, error) {
+	var err error
+	var iRows Rows
+	var qrRow []sqltypes.Value
+	var qrRows [][]sqltypes.Value
+
+	if iRows, err = c.query(sqldb.COM_QUERY, sql); err != nil {
 		return nil, err
 	}
 
-	r = &sqltypes.Result{
-		Fields:       rows.Fields(),
-		RowsAffected: rows.RowsAffected(),
-		InsertID:     rows.LastInsertID(),
-	}
-
-	for rows.Next() {
-		if len(r.Rows) == maxrows {
+	for iRows.Next() {
+		// callback check.
+		if err = fn(iRows); err != nil {
 			break
 		}
-		row, err := rows.RowValues()
-		if err != nil {
+
+		// Max rows check.
+		if len(qrRows) == maxrows {
+			break
+		}
+		if qrRow, err = iRows.RowValues(); err != nil {
+			c.Cleanup()
 			return nil, err
 		}
-		r.Rows = append(r.Rows, row)
-	}
-	if len(r.Rows) > 0 {
-		r.RowsAffected = uint64(len(r.Rows))
+		qrRows = append(qrRows, qrRow)
 	}
 
-	// Check last error
-	if err := rows.Close(); err != nil {
+	// Drain the results and check last error.
+	if err := iRows.Close(); err != nil {
 		c.Cleanup()
 		return nil, err
 	}
-	return r, nil
+	qr := &sqltypes.Result{
+		Fields:       iRows.Fields(),
+		RowsAffected: uint64(len(qrRows)),
+		InsertID:     iRows.LastInsertID(),
+		Rows:         qrRows,
+	}
+	return qr, err
 }
 
 // NextPacket used to get the next packet
