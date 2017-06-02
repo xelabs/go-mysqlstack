@@ -72,7 +72,7 @@ func forceEOF(yylex interface{}) {
 
 %token LEX_ERROR
 %left <empty> UNION
-%token <empty> SELECT INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
+%token <empty> SELECT INSERT REPLACE UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
 %token <empty> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE KEY DEFAULT SET LOCK
 %token <empty> VALUES LAST_INSERT_ID
 %token <empty> NEXT VALUE
@@ -107,22 +107,22 @@ func forceEOF(yylex interface{}) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <empty> CREATE ALTER DROP RENAME ANALYZE
+%token <empty> CREATE ALTER DROP RENAME ANALYZE TRUNCATE
 %token <empty> TABLE INDEX VIEW TO IGNORE IF UNIQUE USING
-%token <empty> SHOW DESCRIBE EXPLAIN XA PROCESSLIST
-%token <empty> PARTITION HASH
+%token <empty> SHOW DESCRIBE EXPLAIN XA PROCESSLIST STATUS
+%token <empty> PARTITION PARTITIONS HASH ENGINE ENGINES DATABASE DATABASES TABLES
 %token <empty> KILL
 
 // Functions
-%token <empty> CURRENT_TIMESTAMP DATABASE DATABASES TABLES
+%token <empty> CURRENT_TIMESTAMP
 
 // MySQL reserved words that are unused by this grammar will map to this token.
 %token <empty> UNUSED
 
 %type <statement> command
 %type <selStmt> select_statement
-%type <statement> insert_statement update_statement delete_statement set_statement
-%type <statement> create_statement alter_statement rename_statement drop_statement
+%type <statement> insert_statement replace_statement update_statement delete_statement set_statement
+%type <statement> create_statement alter_statement rename_statement drop_statement truncate_statement
 %type <statement> analyze_statement other_statement xa_statement shard_statement usedb_statement show_statement kill_statement explain_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op
@@ -189,6 +189,7 @@ command:
     $$ = $1
   }
 | insert_statement
+| replace_statement
 | update_statement
 | delete_statement
 | set_statement
@@ -196,6 +197,7 @@ command:
 | alter_statement
 | rename_statement
 | drop_statement
+| truncate_statement
 | analyze_statement
 | xa_statement
 | shard_statement
@@ -233,6 +235,22 @@ insert_statement:
       vals = append(vals, updateList.Expr)
     }
     $$ = &Insert{Comments: Comments($2), Ignore: $3, Table: $5, Columns: cols, Rows: Values{vals}, OnDup: OnDup($8)}
+  }
+
+replace_statement:
+  REPLACE comment_opt INTO table_name column_list_opt row_list
+  {
+    $$ = &Replace{Comments: Comments($2), Table: $4, Columns: $5, Rows: $6}
+  }
+| REPLACE comment_opt INTO table_name SET update_list
+  {
+    cols := make(Columns, 0, len($6))
+    vals := make(ValTuple, 0, len($6))
+    for _, updateList := range $6 {
+      cols = append(cols, updateList.Name)
+      vals = append(vals, updateList.Expr)
+    }
+    $$ = &Replace{Comments: Comments($2), Table: $4, Columns: cols, Rows: Values{vals}}
   }
 
 update_statement:
@@ -277,6 +295,10 @@ alter_statement:
   {
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $7}
   }
+| ALTER ignore_opt TABLE table_name ENGINE '=' ID
+  {
+    $$ = &DDL{Action: AlterEngineStr, Table: $4, Engine: string($7)}
+  }
 
 rename_statement:
   RENAME TABLE table_name TO table_name
@@ -306,6 +328,11 @@ drop_statement:
     $$ = &DDL{Action: DropDBStr, Database: $4, IfExists: exists}
   }
 
+truncate_statement:
+  TRUNCATE TABLE table_name
+  {
+    $$ = &DDL{Action: TruncateTableStr, Table: $3}
+  }
 
 analyze_statement:
   ANALYZE TABLE table_name
@@ -336,9 +363,17 @@ show_statement:
   {
     $$ = &ShowDatabases{}
   }
+| SHOW STATUS force_eof
+  {
+    $$ = &ShowStatus{}
+  }
 | SHOW TABLES force_eof
   {
     $$ = &ShowTables{}
+  }
+| SHOW ENGINES force_eof
+  {
+    $$ = &ShowEngines{}
   }
 | SHOW TABLES FROM table_id force_eof
   {
@@ -351,6 +386,10 @@ show_statement:
 | SHOW PROCESSLIST force_eof
   {
     $$ = &ShowProcesslist{}
+  }
+| SHOW PARTITIONS ON table_name force_eof
+  {
+      $$ = &ShowPartitions{Table: $4}
   }
 
 kill_statement:

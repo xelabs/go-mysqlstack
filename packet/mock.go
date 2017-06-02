@@ -20,12 +20,11 @@ var _ net.Conn = &MockConn{}
 
 // struct to mock a net.Conn for testing purposes
 type MockConn struct {
-	laddr   net.Addr
-	raddr   net.Addr
-	data    []byte
-	closed  bool
-	read    int
-	written int
+	laddr  net.Addr
+	raddr  net.Addr
+	data   []byte
+	closed bool
+	read   int
 }
 
 func NewMockConn() *MockConn {

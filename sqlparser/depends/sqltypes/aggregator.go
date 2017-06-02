@@ -7,7 +7,21 @@
 
 package sqltypes
 
+import (
+	"bytes"
+)
+
 func Operator(v1 Value, v2 Value, fn func(x interface{}, y interface{}) interface{}) Value {
+	// Sum field type is Decimal, we convert it to golang Float64.
+	switch v1.Type() {
+	case Decimal:
+		v1 = MakeTrusted(Float64, v1.Raw())
+	}
+	switch v2.Type() {
+	case Decimal:
+		v2 = MakeTrusted(Float64, v2.Raw())
+	}
+
 	v1n := v1.ToNative()
 	v2n := v2.ToNative()
 	val := fn(v1n, v2n)
@@ -27,6 +41,8 @@ func SumFn(x interface{}, y interface{}) interface{} {
 		v = (x.(uint64) + y.(uint64))
 	case float64:
 		v = (x.(float64) + y.(float64))
+	case []uint8: // We only support numerical value sum.
+		v = 0
 	}
 	return v
 }
@@ -44,6 +60,10 @@ func MinFn(x interface{}, y interface{}) interface{} {
 		}
 	case float64:
 		if x.(float64) > y.(float64) {
+			v = y
+		}
+	case []uint8:
+		if bytes.Compare(x.([]uint8), y.([]uint8)) > 0 {
 			v = y
 		}
 	}
@@ -65,6 +85,10 @@ func MaxFn(x interface{}, y interface{}) interface{} {
 		if x.(float64) < y.(float64) {
 			v = y
 		}
+	case []uint8:
+		if bytes.Compare(x.([]uint8), y.([]uint8)) < 0 {
+			v = y
+		}
 	}
 	return v
 }
@@ -79,6 +103,8 @@ func DivFn(x interface{}, y interface{}) interface{} {
 		v1 = float64(x.(uint64))
 	case float64:
 		v1 = x.(float64)
+	case []uint8: // We only support numerical value div.
+		return 0
 	}
 	switch y.(type) {
 	case int64:
@@ -87,6 +113,8 @@ func DivFn(x interface{}, y interface{}) interface{} {
 		v2 = float64(y.(uint64))
 	case float64:
 		v2 = y.(float64)
+	case []uint8: // We only support numerical value div.
+		return 0
 	}
 	return v1 / v2
 }

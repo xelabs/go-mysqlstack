@@ -47,7 +47,7 @@ func TestRows(t *testing.T) {
 		InsertID:     123456789,
 	}
 
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -56,7 +56,7 @@ func TestRows(t *testing.T) {
 
 	// query
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -70,7 +70,7 @@ func TestRows(t *testing.T) {
 
 	// query
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 

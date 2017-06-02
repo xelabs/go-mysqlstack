@@ -10,7 +10,6 @@
 package driver
 
 import (
-	"errors"
 	"fmt"
 	"math/rand"
 	"regexp"
@@ -70,7 +69,6 @@ type Cond struct {
 
 // Test Handler
 type TestHandler struct {
-	deny  bool
 	log   *xlog.Log
 	mu    sync.RWMutex
 	ss    map[uint32]*Session
@@ -98,13 +96,6 @@ func (th *TestHandler) setCond(cond *Cond) {
 	defer th.mu.Unlock()
 	th.conds[strings.ToLower(cond.Query)] = cond
 	th.queryCalled[strings.ToLower(cond.Query)] = 0
-}
-
-func (th *TestHandler) removeCond(query string) {
-	th.mu.Lock()
-	defer th.mu.Unlock()
-	delete(th.conds, strings.ToLower(query))
-	delete(th.queryCalled, strings.ToLower(query))
 }
 
 // ResetAll resets all querys.
@@ -180,7 +171,9 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 	if cond != nil {
 		switch cond.Type {
 		case COND_DELAY:
+			th.log.Debug("test.handler.delay:%s,time:%dms", query, cond.Delay)
 			time.Sleep(time.Millisecond * time.Duration(cond.Delay))
+			th.log.Debug("test.handler.delay.done")
 			return cond.Result, nil
 		case COND_ERROR:
 			return nil, cond.Error
@@ -219,7 +212,7 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 		}
 	}
 
-	return nil, errors.New(fmt.Sprintf("testhandler.query[%v].error[can.not.found.the.cond.please.set.first]", query))
+	return nil, fmt.Errorf("testhandler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
 }
 
 // AddQuery used to add a query and its expected result.
@@ -278,11 +271,20 @@ func (th *TestHandler) GetQueryCalledNum(query string) int {
 }
 
 func MockMysqlServer(log *xlog.Log, h Handler) (svr *Listener, err error) {
-	port := randomPort(7000, 20000)
+	port := randomPort(10000, 20000)
 	addr := fmt.Sprintf(":%d", port)
-	if svr, err = NewListener(log, addr, h); err != nil {
-		return
+	for i := 0; i < 5; i++ {
+		if svr, err = NewListener(log, addr, h); err != nil {
+			port = randomPort(5000, 20000)
+			addr = fmt.Sprintf("127.0.0.1:%d", port)
+		} else {
+			break
+		}
 	}
+	if err != nil {
+		return nil, err
+	}
+
 	go func() {
 		svr.Accept()
 	}()

@@ -26,7 +26,7 @@ func TestClient(t *testing.T) {
 		InsertID:     123456789,
 	}
 
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -36,7 +36,7 @@ func TestClient(t *testing.T) {
 	// query
 	{
 
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -55,7 +55,7 @@ func TestClient(t *testing.T) {
 func TestClientClosed(t *testing.T) {
 	result2 := &sqltypes.Result{}
 
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -64,7 +64,7 @@ func TestClientClosed(t *testing.T) {
 
 	{
 		// create session 1
-		client1, err := NewConn("mock", "mock", address, "test")
+		client1, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 
 		th.AddQuery("SELECT2", result2)
@@ -73,7 +73,7 @@ func TestClientClosed(t *testing.T) {
 		assert.Equal(t, result2, r)
 
 		// kill session 1
-		client2, err := NewConn("mock", "mock", address, "test")
+		client2, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		_, err = client2.Query("KILL 1")
 		assert.Nil(t, err)
@@ -111,7 +111,7 @@ func TestClientFetchAllWithFunc(t *testing.T) {
 		},
 	}
 
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -121,7 +121,7 @@ func TestClientFetchAllWithFunc(t *testing.T) {
 	// query
 	{
 
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 

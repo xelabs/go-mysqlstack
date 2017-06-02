@@ -102,17 +102,18 @@ type Statement interface {
 	SQLNode
 }
 
-func (*Union) iStatement()  {}
-func (*Select) iStatement() {}
-func (*Insert) iStatement() {}
-func (*Update) iStatement() {}
-func (*Delete) iStatement() {}
-func (*Set) iStatement()    {}
-func (*DDL) iStatement()    {}
-func (*Xa) iStatement()     {}
-func (*Shard) iStatement()  {}
-func (*UseDB) iStatement()  {}
-func (*Other) iStatement()  {}
+func (*Union) iStatement()   {}
+func (*Select) iStatement()  {}
+func (*Insert) iStatement()  {}
+func (*Replace) iStatement() {}
+func (*Update) iStatement()  {}
+func (*Delete) iStatement()  {}
+func (*Set) iStatement()     {}
+func (*DDL) iStatement()     {}
+func (*Xa) iStatement()      {}
+func (*Shard) iStatement()   {}
+func (*UseDB) iStatement()   {}
+func (*Other) iStatement()   {}
 
 // SelectStatement any SELECT statement.
 type SelectStatement interface {
@@ -287,6 +288,35 @@ func (node *Insert) WalkSubtree(visit Visit) error {
 	)
 }
 
+// Replace represents an REPLACE statement.
+type Replace struct {
+	Comments Comments
+	Table    *TableName
+	Columns  Columns
+	Rows     InsertRows
+}
+
+// Format formats the node.
+func (node *Replace) Format(buf *TrackedBuffer) {
+	buf.Myprintf("replace %vinto %v%v %v",
+		node.Comments,
+		node.Table, node.Columns, node.Rows)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *Replace) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Comments,
+		node.Table,
+		node.Columns,
+		node.Rows,
+	)
+}
+
 // InsertRows represents the rows for an INSERT statement.
 type InsertRows interface {
 	iInsertRows()
@@ -388,8 +418,10 @@ func (node *Set) WalkSubtree(visit Visit) error {
 // Database is set for new database name
 // Table is set for AlterStr, DropStr, RenameStr.
 // NewName is set for AlterStr, CreateStr, RenameStr.
+// Engine is set for the engine name.
 type DDL struct {
 	Action      string
+	Engine      string
 	Database    TableIdent
 	Table       *TableName
 	NewName     *TableName
@@ -399,14 +431,16 @@ type DDL struct {
 
 // DDL strings.
 const (
-	CreateDBStr    = "create database"
-	CreateTableStr = "create table"
-	CreateIndexStr = "create index"
-	DropDBStr      = "drop database"
-	DropTableStr   = "drop table"
-	DropIndexStr   = "drop index"
-	AlterStr       = "alter"
-	RenameStr      = "rename"
+	CreateDBStr      = "create database"
+	CreateTableStr   = "create table"
+	CreateIndexStr   = "create index"
+	DropDBStr        = "drop database"
+	DropTableStr     = "drop table"
+	DropIndexStr     = "drop index"
+	AlterStr         = "alter"
+	AlterEngineStr   = "alter table engine"
+	RenameStr        = "rename"
+	TruncateTableStr = "truncate table"
 )
 
 // Format formats the node.
@@ -460,6 +494,19 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
 		}
 		buf.Myprintf("%s table %s%s", node.Action, db, node.Table.Name.String())
+
+	case AlterEngineStr:
+		db := ""
+		if !node.Table.Qualifier.IsEmpty() {
+			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
+		}
+		buf.Myprintf("alter table %s%s engine = %s", db, node.Table.Name.String(), node.Engine)
+	case TruncateTableStr:
+		db := ""
+		if !node.Table.Qualifier.IsEmpty() {
+			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
+		}
+		buf.Myprintf("truncate table %s%s", db, node.Table.Name.String())
 	}
 }
 

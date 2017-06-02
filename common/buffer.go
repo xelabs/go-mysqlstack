@@ -81,7 +81,6 @@ func (b *Buffer) ReadU8() (v uint8, err error) {
 
 	v = uint8(b.buf[b.seek])
 	b.seek++
-
 	return
 }
 
@@ -101,7 +100,6 @@ func (b *Buffer) ReadU16() (v uint16, err error) {
 	v = uint16(b.buf[b.seek]) |
 		uint16(b.buf[b.seek+1])<<8
 	b.seek += 2
-
 	return
 }
 
@@ -123,7 +121,6 @@ func (b *Buffer) ReadU24() (v uint32, err error) {
 		uint32(b.buf[b.seek+1])<<8 |
 		uint32(b.buf[b.seek+2])<<16
 	b.seek += 3
-
 	return
 }
 
@@ -147,7 +144,6 @@ func (b *Buffer) ReadU32() (v uint32, err error) {
 		uint32(b.buf[b.seek+2])<<16 |
 		uint32(b.buf[b.seek+3])<<24
 	b.seek += 4
-
 	return
 }
 
@@ -179,7 +175,6 @@ func (b *Buffer) ReadU64() (v uint64, err error) {
 		uint64(b.buf[b.seek+6])<<48 |
 		uint64(b.buf[b.seek+7])<<56
 	b.seek += 8
-
 	return
 }
 
@@ -263,7 +258,6 @@ func (b *Buffer) ReadLenEncodeString() (s string, err error) {
 	if s, err = b.ReadString(int(l)); err != nil {
 		return
 	}
-
 	return
 }
 
@@ -284,8 +278,9 @@ func (b *Buffer) ReadLenEncodeBytes() (v []byte, err error) {
 		if v, err = b.ReadBytes(int(l)); err != nil {
 			return
 		}
+	} else {
+		v = nil
 	}
-
 	return
 }
 
@@ -315,7 +310,6 @@ func (b *Buffer) ReadZero(n int) (err error) {
 		return
 	}
 	b.seek += n
-
 	return
 }
 
@@ -334,7 +328,6 @@ func (b *Buffer) ReadString(n int) (s string, err error) {
 
 	s = string(b.buf[b.seek:(b.seek + n)])
 	b.seek += n
-
 	return
 }
 
@@ -347,7 +340,6 @@ func (b *Buffer) ReadStringNUL() (s string, err error) {
 		return
 	}
 	s = string(v)
-
 	return
 }
 
@@ -360,7 +352,6 @@ func (b *Buffer) ReadStringEOF() (s string, err error) {
 		return
 	}
 	s = string(v)
-
 	return
 }
 
@@ -386,7 +377,6 @@ func (b *Buffer) readBytesWithToken(token uint8) (v []byte, err error) {
 	}
 	v = b.buf[b.seek : end-1]
 	b.seek = end
-
 	return
 }
 
@@ -409,6 +399,5 @@ func (b *Buffer) ReadBytes(n int) (v []byte, err error) {
 
 	v = b.buf[b.seek:(b.seek + n)]
 	b.seek += n
-
 	return
 }

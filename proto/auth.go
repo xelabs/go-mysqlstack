@@ -19,7 +19,6 @@ import (
 
 type Auth struct {
 	charset         uint8
-	sequence        uint8
 	maxPacketSize   uint32
 	authResponseLen uint8
 	clientFlags     uint32
@@ -51,6 +50,11 @@ func (a *Auth) User() string {
 
 func (a *Auth) AuthResponse() []byte {
 	return a.authResponse
+}
+
+// To imporve the heap gc cost.
+func (a *Auth) CleanAuthResponse() {
+	a.authResponse = nil
 }
 
 // https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeResponse41

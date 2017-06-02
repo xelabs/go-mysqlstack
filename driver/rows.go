@@ -99,10 +99,7 @@ func (r *TextRows) Next() bool {
 func (r *TextRows) Close() error {
 	for r.Next() {
 	}
-	if err := r.LastError(); err != nil {
-		return err
-	}
-	return nil
+	return r.LastError()
 }
 
 // https://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow
@@ -111,6 +108,7 @@ func (r *TextRows) RowValues() ([]sqltypes.Value, error) {
 		return nil, errors.New("rows.fields is NIL")
 	}
 
+	empty := true
 	colNumber := len(r.fields)
 	result := make([]sqltypes.Value, colNumber)
 	for i := 0; i < colNumber; i++ {
@@ -119,14 +117,19 @@ func (r *TextRows) RowValues() ([]sqltypes.Value, error) {
 			r.c.Cleanup()
 			return nil, err
 		}
-		r.bytes += len(v)
 
 		// if v is NIL, it's a NULL column
 		if v != nil {
+			r.bytes += len(v)
 			result[i] = sqltypes.MakeTrusted(r.fields[i].Type, v)
+			empty = false
 		}
 	}
-	return result, nil
+	if empty {
+		return nil, nil
+	} else {
+		return result, nil
+	}
 }
 
 func (r *TextRows) Datas() []byte {

@@ -60,7 +60,7 @@ func (p *Packets) Next() ([]byte, error) {
 // [payload]
 func (p *Packets) Write(payload []byte) error {
 	payLen := len(payload)
-	pkt := common.NewBuffer(128)
+	pkt := common.NewBuffer(64)
 
 	// body length(24bits)
 	pkt.WriteU24(uint32(payLen))
@@ -81,7 +81,7 @@ func (p *Packets) Write(payload []byte) error {
 func (p *Packets) WriteCommand(command byte, payload []byte) error {
 	// reset packet sequence
 	p.seq = 0
-	pkt := common.NewBuffer(128)
+	pkt := common.NewBuffer(64)
 
 	// body length(24bits):
 	// command length + payload length
@@ -121,10 +121,7 @@ func (p *Packets) WriteOK(affectedRows, lastInsertID uint64, flags uint16, warni
 		StatusFlags:  flags,
 		Warnings:     warnings,
 	}
-	if err := p.Write(proto.PackOK(ok)); err != nil {
-		return err
-	}
-	return nil
+	return p.Write(proto.PackOK(ok))
 }
 
 // ParseERR used to parse the ERR packet.
@@ -139,16 +136,13 @@ func (p *Packets) WriteERR(errorCode uint16, sqlState string, format string, arg
 		SQLState:     sqlState,
 		ErrorMessage: fmt.Sprintf(format, args...),
 	}
-	if err := p.Write(proto.PackERR(e)); err != nil {
-		return err
-	}
-	return nil
+	return p.Write(proto.PackERR(e))
 }
 
 // Append appends packets to buffer but not write to stream
 // NOTICE: SequenceID++
 func (p *Packets) Append(rawdata []byte) error {
-	pkt := common.NewBuffer(128)
+	pkt := common.NewBuffer(64)
 
 	// body length(24bits):
 	// payload length
@@ -199,10 +193,7 @@ func (p *Packets) AppendOKWithEOFHeader(affectedRows, lastInsertID uint64, flags
 	buf := common.NewBuffer(64)
 	buf.WriteU8(proto.EOF_PACKET)
 	buf.WriteBytes(proto.PackOK(ok))
-	if err := p.Append(buf.Datas()); err != nil {
-		return err
-	}
-	return nil
+	return p.Append(buf.Datas())
 }
 
 // WriteColumns writes columns packet to the stream buffer.

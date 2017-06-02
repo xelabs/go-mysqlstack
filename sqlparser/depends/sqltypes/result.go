@@ -71,18 +71,6 @@ func (result *Result) Copy() *Result {
 		}
 		out.Rows = rows
 	}
-	if result.Extras != nil {
-		out.Extras = &querypb.ResultExtras{
-			Fresher: result.Extras.Fresher,
-		}
-		if result.Extras.EventToken != nil {
-			out.Extras.EventToken = &querypb.EventToken{
-				Timestamp: result.Extras.EventToken.Timestamp,
-				Shard:     result.Extras.EventToken.Shard,
-				Position:  result.Extras.EventToken.Position,
-			}
-		}
-	}
 	return out
 }
 
@@ -135,30 +123,7 @@ func (result *Result) AppendResult(src *Result) {
 	if src.InsertID != 0 {
 		result.InsertID = src.InsertID
 	}
-	if len(result.Rows) == 0 {
-		// we haven't gotten any result yet, just save the new extras.
-		result.Extras = src.Extras
-	} else {
-		// Merge the EventTokens / Fresher flags within Extras.
-		if src.Extras == nil {
-			// We didn't get any from innerq. Have to clear any
-			// we'd have gotten already.
-			if result.Extras != nil {
-				result.Extras.EventToken = nil
-				result.Extras.Fresher = false
-			}
-		} else {
-			// We may have gotten an EventToken from
-			// innerqr.  If we also got one earlier, merge
-			// it. If we didn't get one earlier, we
-			// discard the new one.
-			if result.Extras != nil {
-				// Note if any of the two is nil, we get nil.
-				//result.Extras.EventToken = eventtoken.Minimum(result.Extras.EventToken, src.Extras.EventToken)
-
-				//result.Extras.Fresher = result.Extras.Fresher && src.Extras.Fresher
-			}
-		}
+	if len(src.Rows) != 0 {
+		result.Rows = append(result.Rows, src.Rows...)
 	}
-	result.Rows = append(result.Rows, src.Rows...)
 }

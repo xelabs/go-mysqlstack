@@ -68,6 +68,26 @@ func TestAuth(t *testing.T) {
 		got := auth.Charset()
 		assert.Equal(t, want, got)
 	}
+
+	// User.
+	{
+		want := "root"
+		got := auth.User()
+		assert.Equal(t, want, got)
+	}
+
+	// Resp.
+	{
+		want := []byte{
+			0x0e, 0xb4, 0xdd, 0xb5, 0x5b, 0x64, 0xf8, 0x54,
+			0x40, 0xfd, 0xf3, 0x45, 0xfa, 0x37, 0x12, 0x20,
+			0x20, 0xda, 0x38, 0xaa}
+		got := auth.AuthResponse()
+		assert.Equal(t, want, got)
+
+		auth.CleanAuthResponse()
+		assert.Nil(t, auth.AuthResponse())
+	}
 }
 
 func TestAuthUnpackError(t *testing.T) {

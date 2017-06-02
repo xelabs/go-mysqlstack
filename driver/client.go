@@ -11,6 +11,7 @@ package driver
 
 import (
 	"net"
+	"strings"
 	"time"
 
 	"github.com/XeLabs/go-mysqlstack/common"
@@ -60,7 +61,7 @@ func (c *conn) handleErrorPacket(data []byte) error {
 	return nil
 }
 
-func (c *conn) handShake(username, password, database string) error {
+func (c *conn) handShake(username, password, database, charset string) error {
 	var err error
 	var data []byte
 
@@ -89,10 +90,14 @@ func (c *conn) handShake(username, password, database string) error {
 	}
 
 	{
+		cs, ok := sqldb.CharacterSetMap[strings.ToLower(charset)]
+		if !ok {
+			cs = sqldb.CharacterSetUtf8
+		}
 		// auth pack
 		data := c.auth.Pack(
 			proto.DefaultClientCapability,
-			c.greeting.Charset,
+			cs,
 			username,
 			password,
 			c.greeting.Salt,
@@ -103,6 +108,9 @@ func (c *conn) handShake(username, password, database string) error {
 		if err = c.packets.Write(data); err != nil {
 			return err
 		}
+
+		// clean the authreponse bytes to improve the gc pause.
+		c.auth.CleanAuthResponse()
 	}
 
 	{
@@ -120,7 +128,7 @@ func (c *conn) handShake(username, password, database string) error {
 
 // NewConn used to create a new client connection.
 // The timeout is 30 seconds.
-func NewConn(username, password, address, database string) (*conn, error) {
+func NewConn(username, password, address, database, charset string) (*conn, error) {
 	var err error
 	c := &conn{}
 	timeout := time.Duration(30) * time.Second
@@ -140,7 +148,7 @@ func NewConn(username, password, address, database string) (*conn, error) {
 	c.auth = proto.NewAuth()
 	c.greeting = proto.NewGreeting(0)
 	c.packets = packet.NewPackets(c.netConn)
-	if err = c.handShake(username, password, database); err != nil {
+	if err = c.handShake(username, password, database, charset); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -272,7 +280,9 @@ func (c *conn) FetchAllWithFunc(sql string, maxrows int, fn Func) (*sqltypes.Res
 			c.Cleanup()
 			return nil, err
 		}
-		qrRows = append(qrRows, qrRow)
+		if qrRow != nil {
+			qrRows = append(qrRows, qrRow)
+		}
 	}
 
 	// Drain the results and check last error.
@@ -280,9 +290,14 @@ func (c *conn) FetchAllWithFunc(sql string, maxrows int, fn Func) (*sqltypes.Res
 		c.Cleanup()
 		return nil, err
 	}
+
+	rowsAffected := iRows.RowsAffected()
+	if rowsAffected == 0 {
+		rowsAffected = uint64(len(qrRows))
+	}
 	qr := &sqltypes.Result{
 		Fields:       iRows.Fields(),
-		RowsAffected: uint64(len(qrRows)),
+		RowsAffected: rowsAffected,
 		InsertID:     iRows.LastInsertID(),
 		Rows:         qrRows,
 	}

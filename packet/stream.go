@@ -21,7 +21,7 @@ import (
 
 const (
 	// PACKET_BUFFER_SIZE is how much we buffer for reading.
-	PACKET_BUFFER_SIZE = 16 * 1024
+	PACKET_BUFFER_SIZE = 32 * 1024
 )
 
 type Stream struct {
@@ -121,8 +121,5 @@ func (s *Stream) Append(data []byte) error {
 }
 
 func (s *Stream) Flush() error {
-	if err := s.writer.Flush(); err != nil {
-		return err
-	}
-	return nil
+	return s.writer.Flush()
 }

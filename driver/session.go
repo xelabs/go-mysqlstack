@@ -120,7 +120,11 @@ func (s *Session) ID() uint32 {
 func (s *Session) Addr() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.conn.RemoteAddr().String()
+	if s.conn != nil {
+		return s.conn.RemoteAddr().String()
+	} else {
+		return "unknow"
+	}
 }
 
 func (s *Session) SetSchema(schema string) {
@@ -151,4 +155,10 @@ func (s *Session) Scramble() []byte {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.auth.AuthResponse()
+}
+
+func (s *Session) Charset() uint8 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.auth.Charset()
 }

@@ -78,3 +78,56 @@ func (node *ShowProcesslist) Format(buf *TrackedBuffer) {
 func (node *ShowProcesslist) WalkSubtree(visit Visit) error {
 	return nil
 }
+
+func (*ShowEngines) iStatement() {}
+
+// ShowEngines represents a SHOW ENGINES statement.
+type ShowEngines struct {
+}
+
+// Format formats the node.
+func (node *ShowEngines) Format(buf *TrackedBuffer) {
+	buf.WriteString("SHOW ENGINES")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowEngines) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+func (*ShowStatus) iStatement() {}
+
+// ShowStatus represents a SHOW DATABASES statement.
+type ShowStatus struct {
+}
+
+// Format formats the node.
+func (node *ShowStatus) Format(buf *TrackedBuffer) {
+	buf.WriteString("SHOW STATUS")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowStatus) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+func (*ShowPartitions) iStatement() {}
+
+// ShowPartitions represents a SHOW PARTITIONS ON TABLE statement.
+type ShowPartitions struct {
+	Table *TableName
+}
+
+// Format formats the node.
+func (node *ShowPartitions) Format(buf *TrackedBuffer) {
+	buf.WriteString("SHOW PARTITIONS ON ")
+	if !node.Table.Qualifier.IsEmpty() {
+		buf.Myprintf("%s.", node.Table.Qualifier.String())
+	}
+	buf.Myprintf("%s", node.Table.Name.String())
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowPartitions) WalkSubtree(visit Visit) error {
+	return nil
+}

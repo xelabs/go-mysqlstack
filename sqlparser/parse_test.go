@@ -465,6 +465,25 @@ func TestValid(t *testing.T) {
 	}, {
 		input: "insert /* on duplicate */ into a values (1, 2) on duplicate key update b = func(a), c = d",
 	}, {
+		input: "replace /* simple */ into a values (1)",
+	}, {
+		input: "replace /* a.b */ into a.b values (1)",
+	}, {
+		input: "replace /* multi-value */ into a values (1, 2)",
+	}, {
+		input: "replace /* multi-value list */ into a values (1, 2), (3, 4)",
+	}, {
+		input:  "replace /* set */ into a set a = 1, b = 2",
+		output: "replace /* set */ into a(a, b) values (1, 2)",
+	}, {
+		input: "replace /* value expression list */ into a values (a + 1, 2 * 3)",
+	}, {
+		input: "replace /* column list */ into a(a, b) values (1, 2)",
+	}, {
+		input: "replace /* qualified column list */ into a(a, b) values (1, 2)",
+	}, {
+		input: "replace /* select */ into a select b, c from d",
+	}, {
 		input: "update /* simple */ a set b = 3",
 	}, {
 		input: "update /* a.b */ a.b set b = 3",
@@ -807,7 +826,7 @@ func TestErrors(t *testing.T) {
 	}
 }
 
-func TestDDLWithDatabase(t *testing.T) {
+func TestDDL(t *testing.T) {
 	sqls := []struct {
 		input  string
 		output string
@@ -845,8 +864,20 @@ func TestDDLWithDatabase(t *testing.T) {
 		input:  "drop database test",
 		output: "drop database test",
 	}, {
+		input:  "alter table test.t1 engine=tokudb",
+		output: "alter table test.t1 engine = tokudb",
+	}, {
+		input:  "alter table t1 engine=innodb",
+		output: "alter table t1 engine = innodb",
+	}, {
 		input:  "drop database if exists test",
 		output: "drop database if exists test",
+	}, {
+		input:  "truncate table t1",
+		output: "truncate table t1",
+	}, {
+		input:  "truncate table test.t1",
+		output: "truncate table test.t1",
 	}}
 	for _, tcase := range sqls {
 		if tcase.output == "" {
@@ -875,6 +906,12 @@ func TestShow(t *testing.T) {
 		input:  "show tables",
 		output: "SHOW TABLES",
 	}, {
+		input:  "show engines",
+		output: "SHOW ENGINES",
+	}, {
+		input:  "show status",
+		output: "SHOW STATUS",
+	}, {
 		input:  "show tables from test",
 		output: "SHOW TABLES FROM test",
 	}, {
@@ -886,6 +923,12 @@ func TestShow(t *testing.T) {
 	}, {
 		input:  "show processlist",
 		output: "SHOW PROCESSLIST",
+	}, {
+		input:  "show partitions on test.t1",
+		output: "SHOW PARTITIONS ON test.t1",
+	}, {
+		input:  "show partitions on t1",
+		output: "SHOW PARTITIONS ON t1",
 	}}
 	for _, tcase := range sqls {
 		if tcase.output == "" {

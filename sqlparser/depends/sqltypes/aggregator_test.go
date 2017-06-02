@@ -134,3 +134,27 @@ func TestAggregator(t *testing.T) {
 		}
 	}
 }
+
+func TestOperator(t *testing.T) {
+	{
+		x := testVal(Decimal, "3.1415926")
+		y := testVal(Decimal, "3")
+		f := Operator(x, y, SumFn)
+		got := fmt.Sprintf("%+v", f.Raw())
+		want := "[54 46 49 52 49 53 57 50 54]"
+		if want != got {
+			t.Errorf("want:%s\n, got:%s", want, got)
+		}
+	}
+
+	{
+		x := testVal(Null, "")
+		y := testVal(Decimal, "3")
+		f := Operator(x, y, SumFn)
+		got := fmt.Sprintf("%+v", f.Raw())
+		want := "[]"
+		if want != got {
+			t.Errorf("want:%s\n, got:%s", want, got)
+		}
+	}
+}

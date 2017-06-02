@@ -46,7 +46,7 @@ func TestServer(t *testing.T) {
 	}
 	result2 := &sqltypes.Result{}
 
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -55,7 +55,7 @@ func TestServer(t *testing.T) {
 
 	// query
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -66,7 +66,7 @@ func TestServer(t *testing.T) {
 
 	// query1
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 
 		th.AddQuery("SELECT2", result2)
@@ -77,7 +77,7 @@ func TestServer(t *testing.T) {
 
 	// exec
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -88,7 +88,7 @@ func TestServer(t *testing.T) {
 
 	// fetch all
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -100,7 +100,7 @@ func TestServer(t *testing.T) {
 
 	// fetch one
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 
 		th.AddQuery("SELECT1", result1)
@@ -115,7 +115,7 @@ func TestServer(t *testing.T) {
 
 	// error
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -130,7 +130,7 @@ func TestServer(t *testing.T) {
 
 	// panic
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		defer client.Close()
 
@@ -144,7 +144,7 @@ func TestServer(t *testing.T) {
 
 	// ping
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		err = client.Ping()
 		assert.Nil(t, err)
@@ -152,7 +152,7 @@ func TestServer(t *testing.T) {
 
 	// init db
 	{
-		client, err := NewConn("mock", "mock", address, "test")
+		client, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		err = client.InitDB("test")
 		assert.Nil(t, err)
@@ -160,7 +160,7 @@ func TestServer(t *testing.T) {
 
 	// auth denied
 	{
-		_, err := NewConn("mockx", "mock", address, "test")
+		_, err := NewConn("mockx", "mock", address, "test", "")
 		want := "Access denied for user 'mockx' (errno 1045) (sqlstate 28000)"
 		got := err.Error()
 		assert.Equal(t, want, got)
@@ -170,7 +170,7 @@ func TestServer(t *testing.T) {
 func TestServerSessionClose(t *testing.T) {
 	result2 := &sqltypes.Result{}
 
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -178,7 +178,7 @@ func TestServerSessionClose(t *testing.T) {
 
 	{
 		// create session 1
-		client1, err := NewConn("mock", "mock", address, "test")
+		client1, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 
 		th.AddQuery("SELECT2", result2)
@@ -187,7 +187,7 @@ func TestServerSessionClose(t *testing.T) {
 		assert.Equal(t, result2, r)
 
 		// kill session 1
-		client2, err := NewConn("mock", "mock", address, "test")
+		client2, err := NewConn("mock", "mock", address, "test", "")
 		assert.Nil(t, err)
 		_, err = client2.Query("KILL 1")
 		assert.Nil(t, err)
@@ -195,7 +195,7 @@ func TestServerSessionClose(t *testing.T) {
 }
 
 func TestServerComInitDB(t *testing.T) {
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -204,7 +204,7 @@ func TestServerComInitDB(t *testing.T) {
 
 	// query
 	{
-		client, err := NewConn("mock", "mock", address, "xxtest")
+		client, err := NewConn("mock", "mock", address, "xxtest", "")
 		defer client.Close()
 		want := "mock.cominit.db.error: unkonw database[xxtest] (errno 1105) (sqlstate HY000)"
 		got := err.Error()
@@ -213,7 +213,7 @@ func TestServerComInitDB(t *testing.T) {
 }
 
 func TestServerUnsupportedCommand(t *testing.T) {
-	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)
@@ -222,7 +222,7 @@ func TestServerUnsupportedCommand(t *testing.T) {
 
 	// query
 	{
-		client, err := NewConn("mock", "mock", address, "")
+		client, err := NewConn("mock", "mock", address, "", "")
 		assert.Nil(t, err)
 		defer client.Close()
 		err = client.Command(sqldb.COM_SLEEP)
