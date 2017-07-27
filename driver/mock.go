@@ -67,12 +67,19 @@ type Cond struct {
 	Delay int
 }
 
+type CondList struct {
+	len   int
+	idx   int
+	conds []Cond
+}
+
 // Test Handler
 type TestHandler struct {
-	log   *xlog.Log
-	mu    sync.RWMutex
-	ss    map[uint32]*Session
-	conds map[string]*Cond
+	log      *xlog.Log
+	mu       sync.RWMutex
+	ss       map[uint32]*Session
+	conds    map[string]*Cond
+	condList map[string]*CondList
 
 	// patterns is a list of regexp to results.
 	patterns      []exprResult
@@ -88,6 +95,7 @@ func NewTestHandler(log *xlog.Log) *TestHandler {
 		ss:          make(map[uint32]*Session),
 		conds:       make(map[string]*Cond),
 		queryCalled: make(map[string]int),
+		condList:    make(map[string]*CondList),
 	}
 }
 
@@ -123,7 +131,7 @@ func (th *TestHandler) ResetErrors() {
 
 // ConnectionCheck impl.
 func (th *TestHandler) SessionCheck(s *Session) error {
-	th.log.Debug("[%s].coming.db[%s].salt[%v].scramble[%v]", s.Addr(), s.Schema(), s.Salt(), s.Scramble())
+	//th.log.Debug("[%s].coming.db[%s].salt[%v].scramble[%v]", s.Addr(), s.Schema(), s.Salt(), s.Scramble())
 	return nil
 }
 
@@ -212,12 +220,33 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 		}
 	}
 
+	if v, ok := th.condList[query]; ok {
+		idx := 0
+		if v.idx >= v.len {
+			v.idx = 0
+		} else {
+			idx = v.idx
+			v.idx++
+		}
+		return v.conds[idx].Result, nil
+	}
+
 	return nil, fmt.Errorf("testhandler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
 }
 
 // AddQuery used to add a query and its expected result.
 func (th *TestHandler) AddQuery(query string, result *sqltypes.Result) {
 	th.setCond(&Cond{Type: COND_NORMAL, Query: query, Result: result})
+}
+
+func (th *TestHandler) AddQuerys(query string, results ...*sqltypes.Result) {
+	cl := &CondList{}
+	for _, r := range results {
+		cond := Cond{Type: COND_NORMAL, Query: query, Result: r}
+		cl.conds = append(cl.conds, cond)
+		cl.len++
+	}
+	th.condList[query] = cl
 }
 
 // AddQueryDelay used to add a query and returns the expected result after delay_ms.

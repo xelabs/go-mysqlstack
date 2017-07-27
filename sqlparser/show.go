@@ -111,6 +111,22 @@ func (node *ShowStatus) WalkSubtree(visit Visit) error {
 	return nil
 }
 
+func (*ShowVersions) iStatement() {}
+
+// ShowVersions represents a SHOW VERSIONS statement.
+type ShowVersions struct {
+}
+
+// Format formats the node.
+func (node *ShowVersions) Format(buf *TrackedBuffer) {
+	buf.WriteString("SHOW VERSIONS")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowVersions) WalkSubtree(visit Visit) error {
+	return nil
+}
+
 func (*ShowPartitions) iStatement() {}
 
 // ShowPartitions represents a SHOW PARTITIONS ON TABLE statement.
@@ -129,5 +145,39 @@ func (node *ShowPartitions) Format(buf *TrackedBuffer) {
 
 // WalkSubtree walks the nodes of the subtree.
 func (node *ShowPartitions) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+func (*ShowQueryz) iStatement() {}
+
+// ShowQueryz represents a SHOW QUERYZ statement.
+type ShowQueryz struct {
+	Limit *Limit
+}
+
+// Format formats the node.
+func (node *ShowQueryz) Format(buf *TrackedBuffer) {
+	buf.Myprintf("SHOW QUERYZ%v", node.Limit)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowQueryz) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+func (*ShowTxnz) iStatement() {}
+
+// ShowTxnz represents a SHOW TXNZ statement.
+type ShowTxnz struct {
+	Limit *Limit
+}
+
+// Format formats the node.
+func (node *ShowTxnz) Format(buf *TrackedBuffer) {
+	buf.Myprintf("SHOW TXNZ%v", node.Limit)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ShowTxnz) WalkSubtree(visit Visit) error {
 	return nil
 }

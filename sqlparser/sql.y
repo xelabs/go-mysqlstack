@@ -109,7 +109,7 @@ func forceEOF(yylex interface{}) {
 // DDL Tokens
 %token <empty> CREATE ALTER DROP RENAME ANALYZE TRUNCATE
 %token <empty> TABLE INDEX VIEW TO IGNORE IF UNIQUE USING
-%token <empty> SHOW DESCRIBE EXPLAIN XA PROCESSLIST STATUS
+%token <empty> SHOW DESCRIBE EXPLAIN XA PROCESSLIST STATUS QUERYZ TXNZ VERSIONS
 %token <empty> PARTITION PARTITIONS HASH ENGINE ENGINES DATABASE DATABASES TABLES
 %token <empty> KILL
 
@@ -367,6 +367,10 @@ show_statement:
   {
     $$ = &ShowStatus{}
   }
+| SHOW VERSIONS force_eof
+  {
+    $$ = &ShowVersions{}
+  }
 | SHOW TABLES force_eof
   {
     $$ = &ShowTables{}
@@ -390,6 +394,14 @@ show_statement:
 | SHOW PARTITIONS ON table_name force_eof
   {
       $$ = &ShowPartitions{Table: $4}
+  }
+| SHOW QUERYZ limit_opt force_eof
+  {
+    $$ = &ShowQueryz{Limit:$3}
+  }
+| SHOW TXNZ limit_opt force_eof
+  {
+    $$ = &ShowTxnz{Limit:$3}
   }
 
 kill_statement:

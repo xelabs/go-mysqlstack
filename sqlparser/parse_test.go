@@ -401,7 +401,7 @@ func TestValid(t *testing.T) {
 		input: "select /* octal */ 010 from t",
 	}, {
 		input:  "select /* hex */ x'f0A1' from t",
-		output: "select /* hex */ X'f0A1' from t",
+		output: "select /* hex */ x'f0A1' from t",
 	}, {
 		input: "select /* hex caps */ X'F0a1' from t",
 	}, {
@@ -731,9 +731,6 @@ func TestErrors(t *testing.T) {
 		input  string
 		output string
 	}{{
-		input:  "select !8 from t",
-		output: "syntax error at position 9 near '!'",
-	}, {
 		input:  "select $ from t",
 		output: "syntax error at position 9 near '$'",
 	}, {
@@ -744,16 +741,13 @@ func TestErrors(t *testing.T) {
 		output: "syntax error at position 10 near '0x'",
 	}, {
 		input:  "select x'78 from t",
-		output: "syntax error at position 12 near '78'",
-	}, {
-		input:  "select x'777' from t",
-		output: "syntax error at position 14 near '777'",
+		output: "syntax error at position 12 near 'x'78'",
 	}, {
 		input:  "select 'aa\\",
-		output: "syntax error at position 12 near 'aa'",
+		output: "syntax error at position 11 near 'aa'",
 	}, {
 		input:  "select 'aa",
-		output: "syntax error at position 12 near 'aa'",
+		output: "syntax error at position 10 near 'a'",
 	}, {
 		input:  "select * from t where :1 = 2",
 		output: "syntax error at position 24 near ':'",
@@ -770,9 +764,6 @@ func TestErrors(t *testing.T) {
 		input:  "update a set c = values(1)",
 		output: "syntax error at position 24 near 'values'",
 	}, {
-		input:  "update a set c = last_insert_id(1)",
-		output: "syntax error at position 32 near 'last_insert_id'",
-	}, {
 		input: "select(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F" +
 			"(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(" +
 			"F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F" +
@@ -781,7 +772,7 @@ func TestErrors(t *testing.T) {
 			"(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(" +
 			"F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F" +
 			"(F(F(F(F(F(F(F(F(F(F(F(F(",
-		output: "max nesting level reached at position 406",
+		output: "max nesting level reached at position 405",
 	}, {
 		input: "select(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F" +
 			"(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(" +
@@ -791,17 +782,17 @@ func TestErrors(t *testing.T) {
 			"(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(" +
 			"F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F(F" +
 			"(F(F(F(F(F(F(F(F(F(F(F(",
-		output: "syntax error at position 405",
+		output: "syntax error at position 403",
 	}, {
 		input:  "select /* aa",
-		output: "syntax error at position 13 near '/* aa'",
+		output: "syntax error at position 12 near '/* aa'",
 	}, {
 		// This construct is considered invalid due to a grammar conflict.
 		input:  "insert into a select * from b join c on duplicate key update d=e",
 		output: "syntax error at position 50 near 'duplicate'",
 	}, {
 		input:  "select * from a left join b",
-		output: "syntax error at position 29",
+		output: "syntax error at position 27",
 	}, {
 		input:  "select * from a natural join b on c = d",
 		output: "syntax error at position 34 near 'on'",
@@ -814,6 +805,30 @@ func TestErrors(t *testing.T) {
 	}, {
 		input:  "insert into a values (select * from b)",
 		output: "syntax error at position 29 near 'select'",
+	}, {
+		input:  "select database",
+		output: "syntax error at position 15",
+	}, {
+		input:  "select mod from t",
+		output: "syntax error at position 16 near 'from'",
+	}, {
+		input:  "select 1 from t where div 5",
+		output: "syntax error at position 26 near 'div'",
+	}, {
+		input:  "select 1 from t where binary",
+		output: "syntax error at position 28 near 'binary'",
+	}, {
+		input:  "select match(a1, a2) against ('foo' in boolean mode with query expansion) from t",
+		output: "syntax error at position 13 near 'match'",
+	}, {
+		input:  "select /* reserved keyword as unqualified column */ * from t where key = 'test'",
+		output: "syntax error at position 71 near 'key'",
+	}, {
+		input:  "(select /* parenthesized select */ * from t)",
+		output: "syntax error at position 2",
+	}, {
+		input:  "select * from t where id = ((select a from t1 union select b from t2) order by a limit 1)",
+		output: "syntax error at position 76 near 'order'",
 	}}
 	for _, tcase := range invalidSQL {
 		if tcase.output == "" {
@@ -825,7 +840,6 @@ func TestErrors(t *testing.T) {
 		}
 	}
 }
-
 func TestDDL(t *testing.T) {
 	sqls := []struct {
 		input  string
@@ -912,6 +926,9 @@ func TestShow(t *testing.T) {
 		input:  "show status",
 		output: "SHOW STATUS",
 	}, {
+		input:  "show versions",
+		output: "SHOW VERSIONS",
+	}, {
 		input:  "show tables from test",
 		output: "SHOW TABLES FROM test",
 	}, {
@@ -929,6 +946,18 @@ func TestShow(t *testing.T) {
 	}, {
 		input:  "show partitions on t1",
 		output: "SHOW PARTITIONS ON t1",
+	}, {
+		input:  "show queryz",
+		output: "SHOW QUERYZ",
+	}, {
+		input:  "show queryz limit 10",
+		output: "SHOW QUERYZ limit 10",
+	}, {
+		input:  "show txnz",
+		output: "SHOW TXNZ",
+	}, {
+		input:  "show txnz limit 11",
+		output: "SHOW TXNZ limit 11",
 	}}
 	for _, tcase := range sqls {
 		if tcase.output == "" {

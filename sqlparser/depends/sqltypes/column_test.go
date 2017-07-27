@@ -52,7 +52,7 @@ func TestColumnRemove(t *testing.T) {
 			}
 			got := rs.Fields
 			if !reflect.DeepEqual(want, got) {
-				t.Errorf("want:%s\n, got:%s", want, got)
+				t.Errorf("want:%+v\n, got:%+v", want, got)
 			}
 		}
 
@@ -60,7 +60,7 @@ func TestColumnRemove(t *testing.T) {
 			want := "[[10 3.1415926] [9 3.1415927] [8 3.1415928] [1 3.1415926] [1 3.1415925]]"
 			got := fmt.Sprintf("%+v", rs.Rows)
 			if want != got {
-				t.Errorf("want:%s\n, got:%s", want, got)
+				t.Errorf("want:%s\n, got:%+s", want, got)
 			}
 		}
 	}
@@ -80,7 +80,7 @@ func TestColumnRemove(t *testing.T) {
 			}
 			got := rs.Fields
 			if !reflect.DeepEqual(want, got) {
-				t.Errorf("want:%s\n, got:%s", want, got)
+				t.Errorf("want:%+v\n, got:%+v", want, got)
 			}
 		}
 
@@ -105,7 +105,7 @@ func TestColumnRemove(t *testing.T) {
 			}
 			got := rs.Fields
 			if !reflect.DeepEqual(want, got) {
-				t.Errorf("want:%s\n, got:%s", want, got)
+				t.Errorf("want:%+v\n, got:%+v", want, got)
 			}
 		}
 
