@@ -4,18 +4,32 @@
 
 package sqlparser
 
-import ()
+import (
+	"strconv"
+)
+
+type NumVal struct {
+	raw string
+}
+
+func (exp *NumVal) AsUint64() uint64 {
+	v, err := strconv.ParseUint(exp.raw, 10, 64)
+	if err != nil {
+		return 1<<63 - 1
+	}
+	return v
+}
 
 func (*Kill) iStatement() {}
 
 // Kill represents a KILL statement.
 type Kill struct {
-	QueryID string
+	QueryID *NumVal
 }
 
 // Format formats the node.
 func (node *Kill) Format(buf *TrackedBuffer) {
-	buf.Myprintf("kill %s", node.QueryID)
+	buf.Myprintf("kill %s", node.QueryID.raw)
 }
 
 // WalkSubtree walks the nodes of the subtree.

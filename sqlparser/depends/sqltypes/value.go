@@ -56,6 +56,51 @@ func MakeTrusted(typ querypb.Type, val []byte) Value {
 	return Value{typ: typ, val: val}
 }
 
+// NewInt64 builds an Int64 Value.
+func NewInt64(v int64) Value {
+	return MakeTrusted(Int64, strconv.AppendInt(nil, v, 10))
+}
+
+// NewInt32 builds an Int64 Value.
+func NewInt32(v int32) Value {
+	return MakeTrusted(Int32, strconv.AppendInt(nil, int64(v), 10))
+}
+
+// NewUint64 builds an Uint64 Value.
+func NewUint64(v uint64) Value {
+	return MakeTrusted(Uint64, strconv.AppendUint(nil, v, 10))
+}
+
+// NewFloat64 builds an Float64 Value.
+func NewFloat64(v float64) Value {
+	return MakeTrusted(Float64, strconv.AppendFloat(nil, v, 'g', -1, 64))
+}
+
+// NewVarChar builds a VarChar Value.
+func NewVarChar(v string) Value {
+	return MakeTrusted(VarChar, []byte(v))
+}
+
+// NewVarBinary builds a VarBinary Value.
+// The input is a string because it's the most common use case.
+func NewVarBinary(v string) Value {
+	return MakeTrusted(VarBinary, []byte(v))
+}
+
+// NewIntegral builds an integral type from a string representaion.
+// The type will be Int64 or Uint64. Int64 will be preferred where possible.
+func NewIntegral(val string) (n Value, err error) {
+	signed, err := strconv.ParseInt(val, 0, 64)
+	if err == nil {
+		return MakeTrusted(Int64, strconv.AppendInt(nil, signed, 10)), nil
+	}
+	unsigned, err := strconv.ParseUint(val, 0, 64)
+	if err != nil {
+		return Value{}, err
+	}
+	return MakeTrusted(Uint64, strconv.AppendUint(nil, unsigned, 10)), nil
+}
+
 // MakeString makes a VarBinary Value.
 func MakeString(val []byte) Value {
 	return MakeTrusted(VarBinary, val)

@@ -73,13 +73,19 @@ type CondList struct {
 	conds []Cond
 }
 
+type SessionTuple struct {
+	session *Session
+	closed  bool
+	killed  chan bool
+}
+
 // Test Handler
 type TestHandler struct {
 	log      *xlog.Log
 	mu       sync.RWMutex
-	ss       map[uint32]*Session
 	conds    map[string]*Cond
 	condList map[string]*CondList
+	ss       map[uint32]*SessionTuple
 
 	// patterns is a list of regexp to results.
 	patterns      []exprResult
@@ -92,7 +98,7 @@ type TestHandler struct {
 func NewTestHandler(log *xlog.Log) *TestHandler {
 	return &TestHandler{
 		log:         log,
-		ss:          make(map[uint32]*Session),
+		ss:          make(map[uint32]*SessionTuple),
 		conds:       make(map[string]*Cond),
 		queryCalled: make(map[string]int),
 		condList:    make(map[string]*CondList),
@@ -148,7 +154,11 @@ func (th *TestHandler) AuthCheck(s *Session) error {
 func (th *TestHandler) NewSession(s *Session) {
 	th.mu.Lock()
 	defer th.mu.Unlock()
-	th.ss[s.ID()] = s
+	st := &SessionTuple{
+		session: s,
+		killed:  make(chan bool, 2),
+	}
+	th.ss[s.ID()] = st
 }
 
 // UnRegister impl.
@@ -168,25 +178,31 @@ func (th *TestHandler) ComInitDB(s *Session, db string) error {
 
 // ComQuery impl.
 func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, error) {
-	th.log.Debug("test.handler.ComQuery:%v", query)
+	log := th.log
 	query = strings.ToLower(query)
+	log.Debug("test.handler.ComQuery:%v", query)
 
 	th.mu.Lock()
 	th.queryCalled[query]++
 	cond := th.conds[query]
+	sessTuple := th.ss[s.ID()]
 	th.mu.Unlock()
-
 	if cond != nil {
 		switch cond.Type {
 		case COND_DELAY:
-			th.log.Debug("test.handler.delay:%s,time:%dms", query, cond.Delay)
-			time.Sleep(time.Millisecond * time.Duration(cond.Delay))
-			th.log.Debug("test.handler.delay.done")
+			log.Debug("test.handler.delay:%s,time:%dms", query, cond.Delay)
+			select {
+			case <-sessTuple.killed:
+				sessTuple.closed = true
+				return nil, fmt.Errorf("mock.session[%v].query[%s].was.killed...", s.ID(), query)
+			case <-time.After(time.Millisecond * time.Duration(cond.Delay)):
+				log.Debug("mock.handler.delay.done...")
+			}
 			return cond.Result, nil
 		case COND_ERROR:
 			return nil, cond.Error
 		case COND_PANIC:
-			th.log.Panic("test.handler.panic....")
+			log.Panic("mock.handler.panic....")
 		case COND_NORMAL:
 			return cond.Result, nil
 		}
@@ -195,11 +211,14 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 	// kill filter.
 	if strings.HasPrefix(query, "kill") {
 		if id, err := strconv.ParseUint(strings.Split(query, " ")[1], 10, 32); err == nil {
-			th.log.Info("mock.to.kill.%v.session", id)
 			th.mu.Lock()
-			session := th.ss[uint32(id)]
-			if session != nil {
-				session.Close()
+			if sessTuple, ok := th.ss[uint32(id)]; ok {
+				log.Debug("mock.session[%v].to.kill.the.session[%v]...", s.ID(), id)
+				if !sessTuple.closed {
+					sessTuple.killed <- true
+				}
+				delete(th.ss, uint32(id))
+				sessTuple.session.Close()
 			}
 			th.mu.Unlock()
 		}
@@ -231,7 +250,7 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 		return v.conds[idx].Result, nil
 	}
 
-	return nil, fmt.Errorf("testhandler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
+	return nil, fmt.Errorf("mock.handler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
 }
 
 // AddQuery used to add a query and its expected result.

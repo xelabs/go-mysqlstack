@@ -1,6 +1,18 @@
-// Copyright 2012, Google Inc. All rights reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
+/*
+Copyright 2017 Google Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 
 package sqlparser
 
@@ -8,9 +20,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"strings"
 
+	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
@@ -27,11 +40,14 @@ import (
 // This will help avoid name collisions.
 
 // Parse parses the sql and returns a Statement, which
-// is the AST representation of the query.
+// is the AST representation of the query. If a DDL statement
+// is partially parsed but still contains a syntax error, the
+// error is ignored and the DDL is returned anyway.
+
 func Parse(sql string) (Statement, error) {
 	tokenizer := NewStringTokenizer(sql)
 	if yyParse(tokenizer) != 0 {
-		return nil, tokenizer.LastError
+		return nil, errors.New(tokenizer.LastError)
 	}
 	return tokenizer.ParseTree, nil
 }
@@ -88,45 +104,46 @@ func Append(buf *bytes.Buffer, node SQLNode) {
 	node.Format(tbuf)
 }
 
-// GenerateParsedQuery returns a ParsedQuery of the ast.
-func GenerateParsedQuery(node SQLNode) *ParsedQuery {
-	buf := NewTrackedBuffer(nil)
-	buf.Myprintf("%v", node)
-	return buf.ParsedQuery()
-}
-
 // Statement represents a statement.
 type Statement interface {
 	iStatement()
 	SQLNode
 }
 
-func (*Union) iStatement()   {}
-func (*Select) iStatement()  {}
-func (*Insert) iStatement()  {}
-func (*Replace) iStatement() {}
-func (*Update) iStatement()  {}
-func (*Delete) iStatement()  {}
-func (*Set) iStatement()     {}
-func (*DDL) iStatement()     {}
-func (*Xa) iStatement()      {}
-func (*Shard) iStatement()   {}
-func (*UseDB) iStatement()   {}
-func (*Other) iStatement()   {}
+func (*Union) iStatement()      {}
+func (*Select) iStatement()     {}
+func (*Insert) iStatement()     {}
+func (*Update) iStatement()     {}
+func (*Delete) iStatement()     {}
+func (*Set) iStatement()        {}
+func (*DDL) iStatement()        {}
+func (*Show) iStatement()       {}
+func (*Use) iStatement()        {}
+func (*OtherRead) iStatement()  {}
+func (*OtherAdmin) iStatement() {}
+
+// ParenSelect can actually not be a top level statement,
+// but we have to allow it because it's a requirement
+// of SelectStatement.
+func (*ParenSelect) iStatement() {}
 
 // SelectStatement any SELECT statement.
 type SelectStatement interface {
 	iSelectStatement()
 	iStatement()
 	iInsertRows()
+	AddOrder(*Order)
+	SetLimit(*Limit)
 	SQLNode
 }
 
-func (*Select) iSelectStatement() {}
-func (*Union) iSelectStatement()  {}
+func (*Select) iSelectStatement()      {}
+func (*Union) iSelectStatement()       {}
+func (*ParenSelect) iSelectStatement() {}
 
 // Select represents a SELECT statement.
 type Select struct {
+	Cache       string
 	Comments    Comments
 	Distinct    string
 	Hints       string
@@ -152,10 +169,26 @@ const (
 	ShareModeStr = " lock in share mode"
 )
 
+// Select.Cache
+const (
+	SQLCacheStr   = "sql_cache "
+	SQLNoCacheStr = "sql_no_cache "
+)
+
+// AddOrder adds an order by element
+func (node *Select) AddOrder(order *Order) {
+	node.OrderBy = append(node.OrderBy, order)
+}
+
+// SetLimit sets the limit clause
+func (node *Select) SetLimit(limit *Limit) {
+	node.Limit = limit
+}
+
 // Format formats the node.
 func (node *Select) Format(buf *TrackedBuffer) {
-	buf.Myprintf("select %v%s%s%v from %v%v%v%v%v%v%s",
-		node.Comments, node.Distinct, node.Hints, node.SelectExprs,
+	buf.Myprintf("select %v%s%s%s%v from %v%v%v%v%v%v%s",
+		node.Comments, node.Cache, node.Distinct, node.Hints, node.SelectExprs,
 		node.From, node.Where,
 		node.GroupBy, node.Having, node.OrderBy,
 		node.Limit, node.Lock)
@@ -184,9 +217,9 @@ func (node *Select) WalkSubtree(visit Visit) error {
 // is an OR clause, it parenthesizes it. Currently,
 // the OR operator is the only one that's lower precedence
 // than AND.
-func (node *Select) AddWhere(expr BoolExpr) {
+func (node *Select) AddWhere(expr Expr) {
 	if _, ok := expr.(*OrExpr); ok {
-		expr = &ParenBoolExpr{Expr: expr}
+		expr = &ParenExpr{Expr: expr}
 	}
 	if node.Where == nil {
 		node.Where = &Where{
@@ -207,9 +240,9 @@ func (node *Select) AddWhere(expr BoolExpr) {
 // is an OR clause, it parenthesizes it. Currently,
 // the OR operator is the only one that's lower precedence
 // than AND.
-func (node *Select) AddHaving(expr BoolExpr) {
+func (node *Select) AddHaving(expr Expr) {
 	if _, ok := expr.(*OrExpr); ok {
-		expr = &ParenBoolExpr{Expr: expr}
+		expr = &ParenExpr{Expr: expr}
 	}
 	if node.Having == nil {
 		node.Having = &Where{
@@ -225,10 +258,44 @@ func (node *Select) AddHaving(expr BoolExpr) {
 	return
 }
 
+// ParenSelect is a parenthesized SELECT statement.
+type ParenSelect struct {
+	Select SelectStatement
+}
+
+// AddOrder adds an order by element
+func (node *ParenSelect) AddOrder(order *Order) {
+	panic("unreachable")
+}
+
+// SetLimit sets the limit clause
+func (node *ParenSelect) SetLimit(limit *Limit) {
+	panic("unreachable")
+}
+
+// Format formats the node.
+func (node *ParenSelect) Format(buf *TrackedBuffer) {
+	buf.Myprintf("(%v)", node.Select)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ParenSelect) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Select,
+	)
+}
+
 // Union represents a UNION statement.
 type Union struct {
 	Type        string
 	Left, Right SelectStatement
+	OrderBy     OrderBy
+	Limit       *Limit
+	Lock        string
 }
 
 // Union.Type
@@ -238,9 +305,20 @@ const (
 	UnionDistinctStr = "union distinct"
 )
 
+// AddOrder adds an order by element
+func (node *Union) AddOrder(order *Order) {
+	node.OrderBy = append(node.OrderBy, order)
+}
+
+// SetLimit sets the limit clause
+func (node *Union) SetLimit(limit *Limit) {
+	node.Limit = limit
+}
+
 // Format formats the node.
 func (node *Union) Format(buf *TrackedBuffer) {
-	buf.Myprintf("%v %s %v", node.Left, node.Type, node.Right)
+	buf.Myprintf("%v %s %v%v%v%s", node.Left, node.Type, node.Right,
+		node.OrderBy, node.Limit, node.Lock)
 }
 
 // WalkSubtree walks the nodes of the subtree.
@@ -255,19 +333,32 @@ func (node *Union) WalkSubtree(visit Visit) error {
 	)
 }
 
-// Insert represents an INSERT statement.
+// Insert represents an INSERT or REPLACE statement.
+// Per the MySQL docs, http://dev.mysql.com/doc/refman/5.7/en/replace.html
+// Replace is the counterpart to `INSERT IGNORE`, and works exactly like a
+// normal INSERT except if the row exists. In that case it first deletes
+// the row and re-inserts with new values. For that reason we keep it as an Insert struct.
+// Replaces are currently disallowed in sharded schemas because
+// of the implications the deletion part may have on vindexes.
 type Insert struct {
+	Action   string
 	Comments Comments
 	Ignore   string
-	Table    *TableName
+	Table    TableName
 	Columns  Columns
 	Rows     InsertRows
 	OnDup    OnDup
 }
 
+const (
+	InsertStr  = "insert"
+	ReplaceStr = "replace"
+)
+
 // Format formats the node.
 func (node *Insert) Format(buf *TrackedBuffer) {
-	buf.Myprintf("insert %v%sinto %v%v %v%v",
+	buf.Myprintf("%s %v%sinto %v%v %v%v",
+		node.Action,
 		node.Comments, node.Ignore,
 		node.Table, node.Columns, node.Rows, node.OnDup)
 }
@@ -287,49 +378,21 @@ func (node *Insert) WalkSubtree(visit Visit) error {
 	)
 }
 
-// Replace represents an REPLACE statement.
-type Replace struct {
-	Comments Comments
-	Table    *TableName
-	Columns  Columns
-	Rows     InsertRows
-}
-
-// Format formats the node.
-func (node *Replace) Format(buf *TrackedBuffer) {
-	buf.Myprintf("replace %vinto %v%v %v",
-		node.Comments,
-		node.Table, node.Columns, node.Rows)
-}
-
-// WalkSubtree walks the nodes of the subtree.
-func (node *Replace) WalkSubtree(visit Visit) error {
-	if node == nil {
-		return nil
-	}
-	return Walk(
-		visit,
-		node.Comments,
-		node.Table,
-		node.Columns,
-		node.Rows,
-	)
-}
-
 // InsertRows represents the rows for an INSERT statement.
 type InsertRows interface {
 	iInsertRows()
 	SQLNode
 }
 
-func (*Select) iInsertRows() {}
-func (*Union) iInsertRows()  {}
-func (Values) iInsertRows()  {}
+func (*Select) iInsertRows()      {}
+func (*Union) iInsertRows()       {}
+func (Values) iInsertRows()       {}
+func (*ParenSelect) iInsertRows() {}
 
 // Update represents an UPDATE statement.
 type Update struct {
 	Comments Comments
-	Table    *TableName
+	Table    TableName
 	Exprs    UpdateExprs
 	Where    *Where
 	OrderBy  OrderBy
@@ -362,7 +425,7 @@ func (node *Update) WalkSubtree(visit Visit) error {
 // Delete represents a DELETE statement.
 type Delete struct {
 	Comments Comments
-	Table    *TableName
+	Table    TableName
 	Where    *Where
 	OrderBy  OrderBy
 	Limit    *Limit
@@ -370,9 +433,7 @@ type Delete struct {
 
 // Format formats the node.
 func (node *Delete) Format(buf *TrackedBuffer) {
-	buf.Myprintf("delete %vfrom %v%v%v%v",
-		node.Comments,
-		node.Table, node.Where, node.OrderBy, node.Limit)
+	buf.Myprintf("delete %vfrom %v%v%v%v", node.Comments, node.Table, node.Where, node.OrderBy, node.Limit)
 }
 
 // WalkSubtree walks the nodes of the subtree.
@@ -414,98 +475,70 @@ func (node *Set) WalkSubtree(visit Visit) error {
 }
 
 // DDL represents a CREATE, ALTER, DROP or RENAME statement.
-// Database is set for new database name
 // Table is set for AlterStr, DropStr, RenameStr.
 // NewName is set for AlterStr, CreateStr, RenameStr.
-// Engine is set for the engine name.
 type DDL struct {
-	Action      string
-	Engine      string
-	Database    TableIdent
-	Table       *TableName
-	NewName     *TableName
-	IfExists    bool
-	IfNotExists bool
+	Action        string
+	Engine        string
+	IndexName     string
+	PartitionName string
+	IfExists      bool
+	Table         TableName
+	NewName       TableName
+	Database      TableIdent
+	TableSpec     *TableSpec
 }
 
 // DDL strings.
 const (
-	CreateDBStr      = "create database"
-	CreateTableStr   = "create table"
-	CreateIndexStr   = "create index"
-	DropDBStr        = "drop database"
-	DropTableStr     = "drop table"
-	DropIndexStr     = "drop index"
-	AlterStr         = "alter"
-	AlterEngineStr   = "alter table engine"
-	RenameStr        = "rename"
-	TruncateTableStr = "truncate table"
+	CreateDBStr             = "create database"
+	CreateTableStr          = "create table"
+	CreatePartitionTableStr = "create partition table"
+	CreateIndexStr          = "create index"
+	DropDBStr               = "drop database"
+	DropTableStr            = "drop table"
+	DropIndexStr            = "drop index"
+	AlterStr                = "alter"
+	AlterEngineStr          = "alter table engine"
+	RenameStr               = "rename"
+	TruncateTableStr        = "truncate table"
 )
 
 // Format formats the node.
 func (node *DDL) Format(buf *TrackedBuffer) {
 	switch node.Action {
 	case CreateDBStr:
-		ifnotexists := ""
-		if node.IfNotExists {
-			ifnotexists = " if not exists"
-		}
-		buf.Myprintf("%s%s %s", node.Action, ifnotexists, node.Database.String())
+		buf.Myprintf("%s %s", node.Action, node.Database.String())
 	case DropDBStr:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
-		buf.Myprintf("%s%s %s", node.Action, exists, node.Database.String())
-	case CreateTableStr, CreateIndexStr:
-		ifnotexists := ""
-		if node.IfNotExists {
-			ifnotexists = " if not exists"
+		buf.Myprintf("%s%s %v", node.Action, exists, node.Database.String())
+	case CreateTableStr:
+		if node.TableSpec == nil {
+			buf.Myprintf("%s %v", node.Action, node.NewName)
+		} else {
+			buf.Myprintf("%s %v %v", node.Action, node.NewName, node.TableSpec)
 		}
-		db := ""
-		if !node.Table.Qualifier.IsEmpty() {
-			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
-		}
-		buf.Myprintf("%s%s %s%s", node.Action, ifnotexists, db, node.Table.Name.String())
-	case DropTableStr, DropIndexStr:
+	case CreateIndexStr:
+		buf.Myprintf("%s %s on %v", node.Action, node.IndexName, node.NewName)
+	case DropTableStr:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
-		db := ""
-		if !node.Table.Qualifier.IsEmpty() {
-			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
-		}
-		buf.Myprintf("%s%s %s%s", node.Action, exists, db, node.Table.Name.String())
+		buf.Myprintf("%s%s %v", node.Action, exists, node.Table)
+	case DropIndexStr:
+		buf.Myprintf("%s %s on %v", node.Action, node.IndexName, node.Table)
 	case RenameStr:
-		db1 := ""
-		if !node.Table.Qualifier.IsEmpty() {
-			db1 = fmt.Sprintf("%s.", node.Table.Qualifier.String())
-		}
-		db2 := ""
-		if !node.NewName.Qualifier.IsEmpty() {
-			db2 = fmt.Sprintf("%s.", node.NewName.Qualifier.String())
-		}
-		buf.Myprintf("%s table %s%s %s%s", node.Action, db1, node.Table.Name.String(), db2, node.NewName.Name.String())
+		buf.Myprintf("%s %v %v", node.Action, node.Table, node.NewName)
 	case AlterStr:
-		db := ""
-		if !node.Table.Qualifier.IsEmpty() {
-			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
-		}
-		buf.Myprintf("%s table %s%s", node.Action, db, node.Table.Name.String())
-
+		buf.Myprintf("%s table %v", node.Action, node.NewName)
 	case AlterEngineStr:
-		db := ""
-		if !node.Table.Qualifier.IsEmpty() {
-			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
-		}
-		buf.Myprintf("alter table %s%s engine = %s", db, node.Table.Name.String(), node.Engine)
+		buf.Myprintf("alter table %v engine = %s", node.NewName, node.Engine)
 	case TruncateTableStr:
-		db := ""
-		if !node.Table.Qualifier.IsEmpty() {
-			db = fmt.Sprintf("%s.", node.Table.Qualifier.String())
-		}
-		buf.Myprintf("truncate table %s%s", db, node.Table.Name.String())
+		buf.Myprintf("%s %v", node.Action, node.NewName)
 	}
 }
 
@@ -521,67 +554,453 @@ func (node *DDL) WalkSubtree(visit Visit) error {
 	)
 }
 
-// XA represents a XA statement.
-// It should be used only as an indicator. It does not contain
-// the full AST for the statement.
-type Xa struct{}
+// TableSpec describes the structure of a table from a CREATE TABLE statement
+type TableSpec struct {
+	Columns []*ColumnDefinition
+	Indexes []*IndexDefinition
+	Options string
+}
 
 // Format formats the node.
-func (node *Xa) Format(buf *TrackedBuffer) {
-	buf.WriteString("XA")
+func (ts *TableSpec) Format(buf *TrackedBuffer) {
+	buf.Myprintf("(\n")
+	for i, col := range ts.Columns {
+		if i == 0 {
+			buf.Myprintf("\t%v", col)
+		} else {
+			buf.Myprintf(",\n\t%v", col)
+		}
+	}
+	for _, idx := range ts.Indexes {
+		buf.Myprintf(",\n\t%v", idx)
+	}
+
+	buf.Myprintf("\n)%s", strings.Replace(ts.Options, ", ", ",\n  ", -1))
+}
+
+// AddColumn appends the given column to the list in the spec
+func (ts *TableSpec) AddColumn(cd *ColumnDefinition) {
+	ts.Columns = append(ts.Columns, cd)
+}
+
+// AddIndex appends the given index to the list in the spec
+func (ts *TableSpec) AddIndex(id *IndexDefinition) {
+	ts.Indexes = append(ts.Indexes, id)
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *Xa) WalkSubtree(visit Visit) error {
+func (ts *TableSpec) WalkSubtree(visit Visit) error {
+	if ts == nil {
+		return nil
+	}
+
+	for _, n := range ts.Columns {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+
+	for _, n := range ts.Indexes {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-// Shard represents 'PARTITION BY HASH(xx)'.
-// It should be used only as an indicator. It does not contain
-// the full AST for the statement.
-type Shard struct {
-	ShardKey string
+// ColumnDefinition describes a column in a CREATE TABLE statement
+type ColumnDefinition struct {
+	Name ColIdent
+	Type ColumnType
 }
 
 // Format formats the node.
-func (node *Shard) Format(buf *TrackedBuffer) {
-	buf.Myprintf("PARTITION BY HASH(%s)", node.ShardKey)
+func (col *ColumnDefinition) Format(buf *TrackedBuffer) {
+	buf.Myprintf("`%s` %v", col.Name.String(), &col.Type)
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *Shard) WalkSubtree(visit Visit) error {
+func (col *ColumnDefinition) WalkSubtree(visit Visit) error {
+	if col == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		col.Name,
+		&col.Type,
+	)
+}
+
+// ColumnType represents a sql type in a CREATE TABLE statement
+// All optional fields are nil if not specified
+type ColumnType struct {
+	// The base type string
+	Type string
+
+	// Generic field options.
+	NotNull       BoolVal
+	Autoincrement BoolVal
+	Default       *SQLVal
+	Comment       *SQLVal
+
+	// Numeric field options
+	Length   *SQLVal
+	Unsigned BoolVal
+	Zerofill BoolVal
+	Scale    *SQLVal
+
+	// Text field options
+	Charset string
+	Collate string
+
+	// Enum values
+	EnumValues []string
+
+	// Key specification
+	KeyOpt ColumnKeyOption
+}
+
+// Format returns a canonical string representation of the type and all relevant options
+func (ct *ColumnType) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%s", ct.Type)
+
+	if ct.Length != nil && ct.Scale != nil {
+		buf.Myprintf("(%v,%v)", ct.Length, ct.Scale)
+
+	} else if ct.Length != nil {
+		buf.Myprintf("(%v)", ct.Length)
+	}
+
+	if ct.EnumValues != nil {
+		buf.Myprintf("(%s)", strings.Join(ct.EnumValues, ", "))
+	}
+
+	opts := make([]string, 0, 16)
+	if ct.Unsigned {
+		opts = append(opts, keywordStrings[UNSIGNED])
+	}
+	if ct.Zerofill {
+		opts = append(opts, keywordStrings[ZEROFILL])
+	}
+	if ct.Charset != "" {
+		opts = append(opts, keywordStrings[CHARACTER], keywordStrings[SET], ct.Charset)
+	}
+	if ct.Collate != "" {
+		opts = append(opts, keywordStrings[COLLATE], ct.Collate)
+	}
+	if ct.NotNull {
+		opts = append(opts, keywordStrings[NOT], keywordStrings[NULL])
+	}
+	if ct.Default != nil {
+		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default))
+	}
+	if ct.Autoincrement {
+		opts = append(opts, keywordStrings[AUTO_INCREMENT])
+	}
+	if ct.Comment != nil {
+		opts = append(opts, keywordStrings[COMMENT_KEYWORD], String(ct.Comment))
+	}
+	if ct.KeyOpt == ColKeyPrimary {
+		opts = append(opts, keywordStrings[PRIMARY], keywordStrings[KEY])
+	}
+	if ct.KeyOpt == ColKeyUnique {
+		opts = append(opts, keywordStrings[UNIQUE])
+	}
+	if ct.KeyOpt == ColKeyUniqueKey {
+		opts = append(opts, keywordStrings[UNIQUE], keywordStrings[KEY])
+	}
+	if ct.KeyOpt == ColKey {
+		opts = append(opts, keywordStrings[KEY])
+	}
+
+	if len(opts) != 0 {
+		buf.Myprintf(" %s", strings.Join(opts, " "))
+	}
+}
+
+// DescribeType returns the abbreviated type information as required for
+// describe table
+func (ct *ColumnType) DescribeType() string {
+	buf := NewTrackedBuffer(nil)
+	buf.Myprintf("%s", ct.Type)
+	if ct.Length != nil && ct.Scale != nil {
+		buf.Myprintf("(%v,%v)", ct.Length, ct.Scale)
+	} else if ct.Length != nil {
+		buf.Myprintf("(%v)", ct.Length)
+	}
+
+	opts := make([]string, 0, 16)
+	if ct.Unsigned {
+		opts = append(opts, keywordStrings[UNSIGNED])
+	}
+	if ct.Zerofill {
+		opts = append(opts, keywordStrings[ZEROFILL])
+	}
+	if len(opts) != 0 {
+		buf.Myprintf(" %s", strings.Join(opts, " "))
+	}
+	return buf.String()
+}
+
+// SQLType returns the sqltypes type code for the given column
+func (ct *ColumnType) SQLType() querypb.Type {
+	switch ct.Type {
+	case keywordStrings[TINYINT]:
+		if ct.Unsigned {
+			return sqltypes.Uint8
+		}
+		return sqltypes.Int8
+	case keywordStrings[SMALLINT]:
+		if ct.Unsigned {
+			return sqltypes.Uint16
+		}
+		return sqltypes.Int16
+	case keywordStrings[MEDIUMINT]:
+		if ct.Unsigned {
+			return sqltypes.Uint24
+		}
+		return sqltypes.Int24
+	case keywordStrings[INT]:
+		fallthrough
+	case keywordStrings[INTEGER]:
+		if ct.Unsigned {
+			return sqltypes.Uint32
+		}
+		return sqltypes.Int32
+	case keywordStrings[BIGINT]:
+		if ct.Unsigned {
+			return sqltypes.Uint64
+		}
+		return sqltypes.Int64
+	case keywordStrings[TEXT]:
+		return sqltypes.Text
+	case keywordStrings[TINYTEXT]:
+		return sqltypes.Text
+	case keywordStrings[MEDIUMTEXT]:
+		return sqltypes.Text
+	case keywordStrings[LONGTEXT]:
+		return sqltypes.Text
+	case keywordStrings[BLOB]:
+		return sqltypes.Blob
+	case keywordStrings[TINYBLOB]:
+		return sqltypes.Blob
+	case keywordStrings[MEDIUMBLOB]:
+		return sqltypes.Blob
+	case keywordStrings[LONGBLOB]:
+		return sqltypes.Blob
+	case keywordStrings[CHAR]:
+		return sqltypes.Char
+	case keywordStrings[VARCHAR]:
+		return sqltypes.VarChar
+	case keywordStrings[BINARY]:
+		return sqltypes.Binary
+	case keywordStrings[VARBINARY]:
+		return sqltypes.VarBinary
+	case keywordStrings[DATE]:
+		return sqltypes.Date
+	case keywordStrings[TIME]:
+		return sqltypes.Time
+	case keywordStrings[DATETIME]:
+		return sqltypes.Datetime
+	case keywordStrings[TIMESTAMP]:
+		return sqltypes.Timestamp
+	case keywordStrings[YEAR]:
+		return sqltypes.Year
+	case keywordStrings[FLOAT]:
+		return sqltypes.Float32
+	case keywordStrings[DOUBLE]:
+		return sqltypes.Float64
+	case keywordStrings[DECIMAL]:
+		return sqltypes.Decimal
+	case keywordStrings[BIT]:
+		return sqltypes.Bit
+	case keywordStrings[ENUM]:
+		return sqltypes.Enum
+	case keywordStrings[JSON]:
+		return sqltypes.TypeJSON
+	}
+	panic("unimplemented type " + ct.Type)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (ct *ColumnType) WalkSubtree(visit Visit) error {
 	return nil
 }
 
-// UseDB represents 'USE db_name'.
-// It should be used only as an indicator. It does not contain
-// the full AST for the statement.
-type UseDB struct {
-	Database string
+// IndexDefinition describes an index in a CREATE TABLE statement
+type IndexDefinition struct {
+	Info    *IndexInfo
+	Columns []*IndexColumn
 }
 
 // Format formats the node.
-func (node *UseDB) Format(buf *TrackedBuffer) {
-	buf.Myprintf("USE %s", node.Database)
+func (idx *IndexDefinition) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%v (", idx.Info)
+	for i, col := range idx.Columns {
+		if i != 0 {
+			buf.Myprintf(", `%s`", col.Column.String())
+		} else {
+			buf.Myprintf("`%s`", col.Column.String())
+		}
+		if col.Length != nil {
+			buf.Myprintf("(%v)", col.Length)
+		}
+	}
+	buf.Myprintf(")")
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *UseDB) WalkSubtree(visit Visit) error {
+func (idx *IndexDefinition) WalkSubtree(visit Visit) error {
+	if idx == nil {
+		return nil
+	}
+
+	for _, n := range idx.Columns {
+		if err := Walk(visit, n.Column); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-// Other represents a SHOW, DESCRIBE, or EXPLAIN statement.
-// It should be used only as an indicator. It does not contain
-// the full AST for the statement.
-type Other struct{}
+// IndexInfo describes the name and type of an index in a CREATE TABLE statement
+type IndexInfo struct {
+	Type    string
+	Name    ColIdent
+	Primary bool
+	Unique  bool
+}
 
 // Format formats the node.
-func (node *Other) Format(buf *TrackedBuffer) {
-	buf.WriteString("other")
+func (ii *IndexInfo) Format(buf *TrackedBuffer) {
+	if ii.Primary {
+		buf.Myprintf("%s", ii.Type)
+	} else {
+		buf.Myprintf("%s `%v`", ii.Type, ii.Name)
+	}
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *Other) WalkSubtree(visit Visit) error {
+func (ii *IndexInfo) WalkSubtree(visit Visit) error {
+	if err := Walk(visit, ii.Name); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IndexColumn describes a column in an index definition with optional length
+type IndexColumn struct {
+	Column ColIdent
+	Length *SQLVal
+}
+
+// LengthScaleOption is used for types that have an optional length
+// and scale
+type LengthScaleOption struct {
+	Length *SQLVal
+	Scale  *SQLVal
+}
+
+// ColumnKeyOption indicates whether or not the given column is defined as an
+// index element and contains the type of the option
+type ColumnKeyOption int
+
+const (
+	ColKeyNone ColumnKeyOption = iota
+	ColKeyPrimary
+	ColKeyUnique
+	ColKeyUniqueKey
+	ColKey
+)
+
+// Show represents a show statement.
+type Show struct {
+	Type     string
+	Table    TableName
+	Database TableName
+}
+
+// The frollowing constants represent SHOW statements.
+const (
+	ShowDatabasesStr      = "databases"
+	ShowCreateDatabaseStr = "create database"
+	ShowTablesStr         = "tables"
+	ShowTablesFromStr     = "tables from"
+	ShowCreateTableStr    = "create table"
+	ShowEnginesStr        = "engines"
+	ShowStatusStr         = "status"
+	ShowVersionsStr       = "versions"
+	ShowProcesslistStr    = "processlist"
+	ShowQueryzStr         = "queryz"
+	ShowTxnzStr           = "txnz"
+	ShowUnsupportedStr    = "unsupported"
+)
+
+// Format formats the node.
+func (node *Show) Format(buf *TrackedBuffer) {
+	switch node.Type {
+	case ShowCreateDatabaseStr:
+		buf.Myprintf("show %s %v", node.Type, node.Database)
+	case ShowCreateTableStr:
+		buf.Myprintf("show %s %v", node.Type, node.Table)
+	case ShowTablesFromStr:
+		buf.Myprintf("show %s %v", node.Type, node.Database)
+	default:
+		buf.Myprintf("show %s", node.Type)
+	}
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *Show) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+// Use represents a use statement.
+type Use struct {
+	DBName TableIdent
+}
+
+// Format formats the node.
+func (node *Use) Format(buf *TrackedBuffer) {
+	buf.Myprintf("use %v", node.DBName)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *Use) WalkSubtree(visit Visit) error {
+	return Walk(visit, node.DBName)
+}
+
+// OtherRead represents a DESCRIBE, or EXPLAIN statement.
+// It should be used only as an indicator. It does not contain
+// the full AST for the statement.
+type OtherRead struct{}
+
+// Format formats the node.
+func (node *OtherRead) Format(buf *TrackedBuffer) {
+	buf.WriteString("otherread")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *OtherRead) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+// OtherAdmin represents a misc statement that relies on ADMIN privileges,
+// such as REPAIR, OPTIMIZE, or TRUNCATE statement.
+// It should be used only as an indicator. It does not contain
+// the full AST for the statement.
+type OtherAdmin struct{}
+
+// Format formats the node.
+func (node *OtherAdmin) Format(buf *TrackedBuffer) {
+	buf.WriteString("otheradmin")
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *OtherAdmin) WalkSubtree(visit Visit) error {
 	return nil
 }
 
@@ -629,12 +1048,12 @@ type SelectExpr interface {
 }
 
 func (*StarExpr) iSelectExpr()    {}
-func (*NonStarExpr) iSelectExpr() {}
+func (*AliasedExpr) iSelectExpr() {}
 func (Nextval) iSelectExpr()      {}
 
 // StarExpr defines a '*' or 'table.*' expression.
 type StarExpr struct {
-	TableName *TableName
+	TableName TableName
 }
 
 // Format formats the node.
@@ -656,14 +1075,14 @@ func (node *StarExpr) WalkSubtree(visit Visit) error {
 	)
 }
 
-// NonStarExpr defines a non-'*' select expr.
-type NonStarExpr struct {
+// AliasedExpr defines an aliased SELECT expression.
+type AliasedExpr struct {
 	Expr Expr
 	As   ColIdent
 }
 
 // Format formats the node.
-func (node *NonStarExpr) Format(buf *TrackedBuffer) {
+func (node *AliasedExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("%v", node.Expr)
 	if !node.As.IsEmpty() {
 		buf.Myprintf(" as %v", node.As)
@@ -671,7 +1090,7 @@ func (node *NonStarExpr) Format(buf *TrackedBuffer) {
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *NonStarExpr) WalkSubtree(visit Visit) error {
+func (node *AliasedExpr) WalkSubtree(visit Visit) error {
 	if node == nil {
 		return nil
 	}
@@ -684,7 +1103,7 @@ func (node *NonStarExpr) WalkSubtree(visit Visit) error {
 
 // Nextval defines the NEXT VALUE expression.
 type Nextval struct {
-	Expr ValExpr
+	Expr Expr
 }
 
 // Format formats the node.
@@ -721,6 +1140,17 @@ func (node Columns) WalkSubtree(visit Visit) error {
 		}
 	}
 	return nil
+}
+
+// FindColumn finds a column in the column list, returning
+// the index if it exists or -1 otherwise
+func (node Columns) FindColumn(col ColIdent) int {
+	for i, colName := range node {
+		if colName.Equal(col) {
+			return i
+		}
+	}
+	return -1
 }
 
 // TableExprs represents a list of table expressions.
@@ -795,21 +1225,43 @@ type SimpleTableExpr interface {
 	SQLNode
 }
 
-func (*TableName) iSimpleTableExpr() {}
-func (*Subquery) iSimpleTableExpr()  {}
+func (TableName) iSimpleTableExpr() {}
+func (*Subquery) iSimpleTableExpr() {}
+
+// TableNames is a list of TableName.
+type TableNames []TableName
+
+// Format formats the node.
+func (node TableNames) Format(buf *TrackedBuffer) {
+	var prefix string
+	for _, n := range node {
+		buf.Myprintf("%s%v", prefix, n)
+		prefix = ", "
+	}
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node TableNames) WalkSubtree(visit Visit) error {
+	for _, n := range node {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // TableName represents a table  name.
-// Qualifier, if specified, represents a database.
-// It's generally not supported because vitess has its own
-// rules about which database to send a query to.
+// Qualifier, if specified, represents a database or keyspace.
+// TableName is a value struct whose fields are case sensitive.
+// This means two TableName vars can be compared for equality
+// and a TableName can also be used as key in a map.
 type TableName struct {
 	Name, Qualifier TableIdent
 }
 
 // Format formats the node.
-func (node *TableName) Format(buf *TrackedBuffer) {
-	// node can be nil for unqualified column names.
-	if node == nil {
+func (node TableName) Format(buf *TrackedBuffer) {
+	if node.IsEmpty() {
 		return
 	}
 	if !node.Qualifier.IsEmpty() {
@@ -819,10 +1271,7 @@ func (node *TableName) Format(buf *TrackedBuffer) {
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *TableName) WalkSubtree(visit Visit) error {
-	if node == nil {
-		return nil
-	}
+func (node TableName) WalkSubtree(visit Visit) error {
 	return Walk(
 		visit,
 		node.Name,
@@ -831,22 +1280,19 @@ func (node *TableName) WalkSubtree(visit Visit) error {
 }
 
 // IsEmpty returns true if TableName is nil or empty.
-func (node *TableName) IsEmpty() bool {
-	return node == nil || (node.Qualifier.IsEmpty() && node.Name.IsEmpty())
+func (node TableName) IsEmpty() bool {
+	// If Name is empty, Qualifer is also empty.
+	return node.Name.IsEmpty()
 }
 
-// Equal returns true if the table names match.
-func (node *TableName) Equal(t *TableName) bool {
-	if node.IsEmpty() {
-		if t.IsEmpty() {
-			return true
-		}
-		return false
+// ToViewName returns a TableName acceptable for use as a VIEW. VIEW names are
+// always lowercase, so ToViewName lowercasese the name. Databases are case-sensitive
+// so Qualifier is left untouched.
+func (node TableName) ToViewName() TableName {
+	return TableName{
+		Qualifier: node.Qualifier,
+		Name:      NewTableIdent(strings.ToLower(node.Name.v)),
 	}
-	if t.IsEmpty() {
-		return false
-	}
-	return node.Name == t.Name && node.Qualifier == t.Qualifier
 }
 
 // ParenTableExpr represents a parenthesized list of TableExpr.
@@ -875,7 +1321,7 @@ type JoinTableExpr struct {
 	LeftExpr  TableExpr
 	Join      string
 	RightExpr TableExpr
-	On        BoolExpr
+	On        Expr
 }
 
 // JoinTableExpr.Join
@@ -950,7 +1396,7 @@ func (node *IndexHints) WalkSubtree(visit Visit) error {
 // Where represents a WHERE or HAVING clause.
 type Where struct {
 	Type string
-	Expr BoolExpr
+	Expr Expr
 }
 
 // Where.Type
@@ -960,8 +1406,8 @@ const (
 )
 
 // NewWhere creates a WHERE or HAVING clause out
-// of a BoolExpr. If the expression is nil, it returns nil.
-func NewWhere(typ string, expr BoolExpr) *Where {
+// of a Expr. If the expression is nil, it returns nil.
+func NewWhere(typ string, expr Expr) *Where {
 	if expr == nil {
 		return nil
 	}
@@ -993,46 +1439,60 @@ type Expr interface {
 	SQLNode
 }
 
-func (*AndExpr) iExpr()        {}
-func (*OrExpr) iExpr()         {}
-func (*NotExpr) iExpr()        {}
-func (*ParenBoolExpr) iExpr()  {}
-func (*ComparisonExpr) iExpr() {}
-func (*RangeCond) iExpr()      {}
-func (*IsExpr) iExpr()         {}
-func (*ExistsExpr) iExpr()     {}
-func (*SQLVal) iExpr()         {}
-func (*NullVal) iExpr()        {}
-func (BoolVal) iExpr()         {}
-func (*ColName) iExpr()        {}
-func (ValTuple) iExpr()        {}
-func (*Subquery) iExpr()       {}
-func (ListArg) iExpr()         {}
-func (*BinaryExpr) iExpr()     {}
-func (*UnaryExpr) iExpr()      {}
-func (*IntervalExpr) iExpr()   {}
-func (*FuncExpr) iExpr()       {}
-func (*CaseExpr) iExpr()       {}
+func (*AndExpr) iExpr()          {}
+func (*OrExpr) iExpr()           {}
+func (*NotExpr) iExpr()          {}
+func (*ParenExpr) iExpr()        {}
+func (*ComparisonExpr) iExpr()   {}
+func (*RangeCond) iExpr()        {}
+func (*IsExpr) iExpr()           {}
+func (*ExistsExpr) iExpr()       {}
+func (*SQLVal) iExpr()           {}
+func (*NullVal) iExpr()          {}
+func (BoolVal) iExpr()           {}
+func (*ColName) iExpr()          {}
+func (ValTuple) iExpr()          {}
+func (*Subquery) iExpr()         {}
+func (ListArg) iExpr()           {}
+func (*BinaryExpr) iExpr()       {}
+func (*UnaryExpr) iExpr()        {}
+func (*IntervalExpr) iExpr()     {}
+func (*CollateExpr) iExpr()      {}
+func (*FuncExpr) iExpr()         {}
+func (*CaseExpr) iExpr()         {}
+func (*ValuesFuncExpr) iExpr()   {}
+func (*ConvertExpr) iExpr()      {}
+func (*ConvertUsingExpr) iExpr() {}
+func (*MatchExpr) iExpr()        {}
+func (*GroupConcatExpr) iExpr()  {}
+func (*Default) iExpr()          {}
 
-// BoolExpr represents a boolean expression.
-type BoolExpr interface {
-	iBoolExpr()
-	Expr
+// Exprs represents a list of value expressions.
+// It's not a valid expression because it's not parenthesized.
+type Exprs []Expr
+
+// Format formats the node.
+func (node Exprs) Format(buf *TrackedBuffer) {
+	var prefix string
+	for _, n := range node {
+		buf.Myprintf("%s%v", prefix, n)
+		prefix = ", "
+	}
 }
 
-func (BoolVal) iBoolExpr()         {}
-func (*AndExpr) iBoolExpr()        {}
-func (*OrExpr) iBoolExpr()         {}
-func (*NotExpr) iBoolExpr()        {}
-func (*ParenBoolExpr) iBoolExpr()  {}
-func (*ComparisonExpr) iBoolExpr() {}
-func (*RangeCond) iBoolExpr()      {}
-func (*IsExpr) iBoolExpr()         {}
-func (*ExistsExpr) iBoolExpr()     {}
+// WalkSubtree walks the nodes of the subtree.
+func (node Exprs) WalkSubtree(visit Visit) error {
+	for _, n := range node {
+		if err := Walk(visit, n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // AndExpr represents an AND expression.
 type AndExpr struct {
-	Left, Right BoolExpr
+	Left, Right Expr
 }
 
 // Format formats the node.
@@ -1054,7 +1514,7 @@ func (node *AndExpr) WalkSubtree(visit Visit) error {
 
 // OrExpr represents an OR expression.
 type OrExpr struct {
-	Left, Right BoolExpr
+	Left, Right Expr
 }
 
 // Format formats the node.
@@ -1076,7 +1536,7 @@ func (node *OrExpr) WalkSubtree(visit Visit) error {
 
 // NotExpr represents a NOT expression.
 type NotExpr struct {
-	Expr BoolExpr
+	Expr Expr
 }
 
 // Format formats the node.
@@ -1095,18 +1555,18 @@ func (node *NotExpr) WalkSubtree(visit Visit) error {
 	)
 }
 
-// ParenBoolExpr represents a parenthesized boolean expression.
-type ParenBoolExpr struct {
-	Expr BoolExpr
+// ParenExpr represents a parenthesized boolean expression.
+type ParenExpr struct {
+	Expr Expr
 }
 
 // Format formats the node.
-func (node *ParenBoolExpr) Format(buf *TrackedBuffer) {
+func (node *ParenExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("(%v)", node.Expr)
 }
 
 // WalkSubtree walks the nodes of the subtree.
-func (node *ParenBoolExpr) WalkSubtree(visit Visit) error {
+func (node *ParenExpr) WalkSubtree(visit Visit) error {
 	if node == nil {
 		return nil
 	}
@@ -1119,7 +1579,8 @@ func (node *ParenBoolExpr) WalkSubtree(visit Visit) error {
 // ComparisonExpr represents a two-value comparison expression.
 type ComparisonExpr struct {
 	Operator    string
-	Left, Right ValExpr
+	Left, Right Expr
+	Escape      Expr
 }
 
 // ComparisonExpr.Operator
@@ -1144,6 +1605,9 @@ const (
 // Format formats the node.
 func (node *ComparisonExpr) Format(buf *TrackedBuffer) {
 	buf.Myprintf("%v %s %v", node.Left, node.Operator, node.Right)
+	if node.Escape != nil {
+		buf.Myprintf(" escape %v", node.Escape)
+	}
 }
 
 // WalkSubtree walks the nodes of the subtree.
@@ -1155,14 +1619,15 @@ func (node *ComparisonExpr) WalkSubtree(visit Visit) error {
 		visit,
 		node.Left,
 		node.Right,
+		node.Escape,
 	)
 }
 
 // RangeCond represents a BETWEEN or a NOT BETWEEN expression.
 type RangeCond struct {
 	Operator string
-	Left     ValExpr
-	From, To ValExpr
+	Left     Expr
+	From, To Expr
 }
 
 // RangeCond.Operator
@@ -1242,25 +1707,6 @@ func (node *ExistsExpr) WalkSubtree(visit Visit) error {
 	)
 }
 
-// ValExpr represents a value expression.
-type ValExpr interface {
-	iValExpr()
-	Expr
-}
-
-func (*SQLVal) iValExpr()       {}
-func (*NullVal) iValExpr()      {}
-func (*ColName) iValExpr()      {}
-func (ValTuple) iValExpr()      {}
-func (*Subquery) iValExpr()     {}
-func (ListArg) iValExpr()       {}
-func (*BinaryExpr) iValExpr()   {}
-func (*UnaryExpr) iValExpr()    {}
-func (*IntervalExpr) iValExpr() {}
-func (*FuncExpr) iValExpr()     {}
-func (*CaseExpr) iValExpr()     {}
-func (BoolVal) iValExpr()       {}
-
 // ValType specifies the type for SQLVal.
 type ValType int
 
@@ -1318,10 +1764,11 @@ func NewValArg(in []byte) *SQLVal {
 func (node *SQLVal) Format(buf *TrackedBuffer) {
 	switch node.Type {
 	case StrVal:
-		s := sqltypes.MakeString([]byte(node.Val))
-		s.EncodeSQL(buf)
-	case IntVal, FloatVal, HexNum, HexVal:
+		sqltypes.MakeTrusted(sqltypes.VarBinary, node.Val).EncodeSQL(buf)
+	case IntVal, FloatVal, HexNum:
 		buf.Myprintf("%s", []byte(node.Val))
+	case HexVal:
+		buf.Myprintf("X'%s'", []byte(node.Val))
 	case ValArg:
 		buf.WriteArg(string(node.Val))
 	default:
@@ -1382,7 +1829,7 @@ type ColName struct {
 	// table or column this node references.
 	Metadata  interface{}
 	Name      ColIdent
-	Qualifier *TableName
+	Qualifier TableName
 }
 
 // Format formats the node.
@@ -1411,14 +1858,14 @@ func (node *ColName) Equal(c *ColName) bool {
 	if node == nil || c == nil {
 		return false
 	}
-	return node.Name.Equal(c.Name) && node.Qualifier.Equal(c.Qualifier)
+	return node.Name.Equal(c.Name) && node.Qualifier == c.Qualifier
 }
 
 // ColTuple represents a list of column values.
 // It can be ValTuple, Subquery, ListArg.
 type ColTuple interface {
 	iColTuple()
-	ValExpr
+	Expr
 }
 
 func (ValTuple) iColTuple()  {}
@@ -1426,39 +1873,16 @@ func (*Subquery) iColTuple() {}
 func (ListArg) iColTuple()   {}
 
 // ValTuple represents a tuple of actual values.
-type ValTuple ValExprs
+type ValTuple Exprs
 
 // Format formats the node.
 func (node ValTuple) Format(buf *TrackedBuffer) {
-	buf.Myprintf("(%v)", ValExprs(node))
+	buf.Myprintf("(%v)", Exprs(node))
 }
 
 // WalkSubtree walks the nodes of the subtree.
 func (node ValTuple) WalkSubtree(visit Visit) error {
-	return Walk(visit, ValExprs(node))
-}
-
-// ValExprs represents a list of value expressions.
-// It's not a valid expression because it's not parenthesized.
-type ValExprs []ValExpr
-
-// Format formats the node.
-func (node ValExprs) Format(buf *TrackedBuffer) {
-	var prefix string
-	for _, n := range node {
-		buf.Myprintf("%s%v", prefix, n)
-		prefix = ", "
-	}
-}
-
-// WalkSubtree walks the nodes of the subtree.
-func (node ValExprs) WalkSubtree(visit Visit) error {
-	for _, n := range node {
-		if err := Walk(visit, n); err != nil {
-			return err
-		}
-	}
-	return nil
+	return Walk(visit, Exprs(node))
 }
 
 // Subquery represents a subquery.
@@ -1510,6 +1934,7 @@ const (
 	MinusStr      = "-"
 	MultStr       = "*"
 	DivStr        = "/"
+	IntDivStr     = "div"
 	ModStr        = "%"
 	ShiftLeftStr  = "<<"
 	ShiftRightStr = ">>"
@@ -1534,24 +1959,26 @@ func (node *BinaryExpr) WalkSubtree(visit Visit) error {
 
 // UnaryExpr represents a unary value expression.
 type UnaryExpr struct {
-	Operator byte
+	Operator string
 	Expr     Expr
 }
 
 // UnaryExpr.Operator
 const (
-	UPlusStr  = '+'
-	UMinusStr = '-'
-	TildaStr  = '~'
+	UPlusStr  = "+"
+	UMinusStr = "-"
+	TildaStr  = "~"
+	BangStr   = "!"
+	BinaryStr = "binary "
 )
 
 // Format formats the node.
 func (node *UnaryExpr) Format(buf *TrackedBuffer) {
 	if _, unary := node.Expr.(*UnaryExpr); unary {
-		buf.Myprintf("%c %v", node.Operator, node.Expr)
+		buf.Myprintf("%s %v", node.Operator, node.Expr)
 		return
 	}
-	buf.Myprintf("%c%v", node.Operator, node.Expr)
+	buf.Myprintf("%s%v", node.Operator, node.Expr)
 }
 
 // WalkSubtree walks the nodes of the subtree.
@@ -1588,11 +2015,34 @@ func (node *IntervalExpr) WalkSubtree(visit Visit) error {
 	)
 }
 
+// CollateExpr represents dynamic collate operator.
+type CollateExpr struct {
+	Expr    Expr
+	Charset string
+}
+
+// Format formats the node.
+func (node *CollateExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%v collate %s", node.Expr, node.Charset)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *CollateExpr) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Expr,
+	)
+}
+
 // FuncExpr represents a function call.
 type FuncExpr struct {
-	Name     ColIdent
-	Distinct bool
-	Exprs    SelectExprs
+	Qualifier TableIdent
+	Name      ColIdent
+	Distinct  bool
+	Exprs     SelectExprs
 }
 
 // Format formats the node.
@@ -1600,6 +2050,9 @@ func (node *FuncExpr) Format(buf *TrackedBuffer) {
 	var distinct string
 	if node.Distinct {
 		distinct = "distinct "
+	}
+	if !node.Qualifier.IsEmpty() {
+		buf.Myprintf("%v.", node.Qualifier)
 	}
 	// Function names should not be back-quoted even
 	// if they match a reserved word. So, print the
@@ -1614,6 +2067,8 @@ func (node *FuncExpr) WalkSubtree(visit Visit) error {
 	}
 	return Walk(
 		visit,
+		node.Qualifier,
+		node.Name,
 		node.Exprs,
 	)
 }
@@ -1643,11 +2098,178 @@ func (node *FuncExpr) IsAggregate() bool {
 	return Aggregates[node.Name.Lowered()]
 }
 
+// GroupConcatExpr represents a call to GROUP_CONCAT
+type GroupConcatExpr struct {
+	Distinct  string
+	Exprs     SelectExprs
+	OrderBy   OrderBy
+	Separator string
+}
+
+// Format formats the node
+func (node *GroupConcatExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("group_concat(%s%v%v%s)", node.Distinct, node.Exprs, node.OrderBy, node.Separator)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *GroupConcatExpr) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Exprs,
+		node.OrderBy,
+	)
+}
+
+// ValuesFuncExpr represents a function call.
+type ValuesFuncExpr struct {
+	Name     ColIdent
+	Resolved Expr
+}
+
+// Format formats the node.
+func (node *ValuesFuncExpr) Format(buf *TrackedBuffer) {
+	// Function names should not be back-quoted even
+	// if they match a reserved word. So, print the
+	// name as is.
+	if node.Resolved != nil {
+		buf.Myprintf("%v", node.Resolved)
+	} else {
+		buf.Myprintf("values(%s)", node.Name.String())
+	}
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ValuesFuncExpr) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Name,
+		node.Resolved,
+	)
+}
+
+// ConvertExpr represents a call to CONVERT(expr, type)
+// or it's equivalent CAST(expr AS type). Both are rewritten to the former.
+type ConvertExpr struct {
+	Expr Expr
+	Type *ConvertType
+}
+
+// Format formats the node.
+func (node *ConvertExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("convert(%v, %v)", node.Expr, node.Type)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ConvertExpr) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Expr,
+		node.Type,
+	)
+}
+
+// ConvertUsingExpr represents a call to CONVERT(expr USING charset).
+type ConvertUsingExpr struct {
+	Expr Expr
+	Type string
+}
+
+// Format formats the node.
+func (node *ConvertUsingExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("convert(%v using %s)", node.Expr, node.Type)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ConvertUsingExpr) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Expr,
+	)
+}
+
+// ConvertType represents the type in call to CONVERT(expr, type)
+type ConvertType struct {
+	Type     string
+	Length   *SQLVal
+	Scale    *SQLVal
+	Operator string
+	Charset  string
+}
+
+// this string is "character set" and this comment is required
+const (
+	CharacterSetStr = " character set"
+)
+
+// Format formats the node.
+func (node *ConvertType) Format(buf *TrackedBuffer) {
+	buf.Myprintf("%s", node.Type)
+	if node.Length != nil {
+		buf.Myprintf("(%v", node.Length)
+		if node.Scale != nil {
+			buf.Myprintf(", %v", node.Scale)
+		}
+		buf.Myprintf(")")
+	}
+	if node.Charset != "" {
+		buf.Myprintf("%s %s", node.Operator, node.Charset)
+	}
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *ConvertType) WalkSubtree(visit Visit) error {
+	return nil
+}
+
+// MatchExpr represents a call to the MATCH function
+type MatchExpr struct {
+	Columns SelectExprs
+	Expr    Expr
+	Option  string
+}
+
+// MatchExpr.Option
+const (
+	BooleanModeStr                           = " in boolean mode"
+	NaturalLanguageModeStr                   = " in natural language mode"
+	NaturalLanguageModeWithQueryExpansionStr = " in natural language mode with query expansion"
+	QueryExpansionStr                        = " with query expansion"
+)
+
+// Format formats the node
+func (node *MatchExpr) Format(buf *TrackedBuffer) {
+	buf.Myprintf("match(%v) against (%v%s)", node.Columns, node.Expr, node.Option)
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *MatchExpr) WalkSubtree(visit Visit) error {
+	if node == nil {
+		return nil
+	}
+	return Walk(
+		visit,
+		node.Columns,
+		node.Expr,
+	)
+}
+
 // CaseExpr represents a CASE expression.
 type CaseExpr struct {
-	Expr  ValExpr
+	Expr  Expr
 	Whens []*When
-	Else  ValExpr
+	Else  Expr
 }
 
 // Format formats the node.
@@ -1684,10 +2306,28 @@ func (node *CaseExpr) WalkSubtree(visit Visit) error {
 	return nil
 }
 
+// Default represents a DEFAULT expression.
+type Default struct {
+	ColName string
+}
+
+// Format formats the node.
+func (node *Default) Format(buf *TrackedBuffer) {
+	buf.Myprintf("default")
+	if node.ColName != "" {
+		buf.Myprintf("(%s)", node.ColName)
+	}
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (node *Default) WalkSubtree(visit Visit) error {
+	return nil
+}
+
 // When represents a WHEN sub-expression.
 type When struct {
-	Cond BoolExpr
-	Val  ValExpr
+	Cond Expr
+	Val  Expr
 }
 
 // Format formats the node.
@@ -1708,7 +2348,7 @@ func (node *When) WalkSubtree(visit Visit) error {
 }
 
 // GroupBy represents a GROUP BY clause.
-type GroupBy []ValExpr
+type GroupBy []Expr
 
 // Format formats the node.
 func (node GroupBy) Format(buf *TrackedBuffer) {
@@ -1753,7 +2393,7 @@ func (node OrderBy) WalkSubtree(visit Visit) error {
 
 // Order represents an ordering expression.
 type Order struct {
-	Expr      ValExpr
+	Expr      Expr
 	Direction string
 }
 
@@ -1785,7 +2425,7 @@ func (node *Order) WalkSubtree(visit Visit) error {
 
 // Limit represents a LIMIT clause.
 type Limit struct {
-	Offset, Rowcount ValExpr
+	Offset, Rowcount Expr
 }
 
 // Format formats the node.
@@ -1858,8 +2498,8 @@ func (node UpdateExprs) WalkSubtree(visit Visit) error {
 
 // UpdateExpr represents an update expression.
 type UpdateExpr struct {
-	Name ColIdent
-	Expr ValExpr
+	Name *ColName
+	Expr Expr
 }
 
 // Format formats the node.
@@ -2088,24 +2728,3 @@ func compliantName(in string) string {
 	}
 	return buf.String()
 }
-
-// Radon BEGIN
-
-// Use represents a SET statement.
-type Use struct {
-	DB string
-}
-
-func (*Use) iStatement() {}
-
-// Format formats the node.
-func (node *Use) Format(buf *TrackedBuffer) {
-	buf.Myprintf("use %s", node.DB)
-}
-
-// WalkSubtree walks the nodes of the subtree.
-func (node *Use) WalkSubtree(visit Visit) error {
-	return nil
-}
-
-// Radon END

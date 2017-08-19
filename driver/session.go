@@ -55,7 +55,7 @@ func (s *Session) writeErrFromError(err error) error {
 func (s *Session) writeResult(result *sqltypes.Result) error {
 	if len(result.Fields) == 0 {
 		// This is just an INSERT result, send an OK packet.
-		return s.packets.WriteOK(result.RowsAffected, result.InsertID, s.greeting.Status(), 0)
+		return s.packets.WriteOK(result.RowsAffected, result.InsertID, s.greeting.Status(), result.Warnings)
 	}
 
 	// 1. Write columns.
@@ -90,7 +90,7 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 			return err
 		}
 	} else {
-		if err := s.packets.AppendOKWithEOFHeader(result.RowsAffected, result.InsertID, s.greeting.Status(), 0); err != nil {
+		if err := s.packets.AppendOKWithEOFHeader(result.RowsAffected, result.InsertID, s.greeting.Status(), result.Warnings); err != nil {
 			return err
 		}
 	}
