@@ -10,6 +10,7 @@
 package driver
 
 import (
+	"context"
 	"net"
 	"strings"
 	"time"
@@ -327,7 +328,6 @@ func (c *conn) Quit() {
 
 func (c *conn) Cleanup() {
 	if c.netConn != nil {
-		c.Quit()
 		c.netConn.Close()
 		c.netConn = nil
 	}
@@ -336,7 +336,23 @@ func (c *conn) Cleanup() {
 // Close closes the connection
 func (c *conn) Close() error {
 	if c != nil && c.netConn != nil {
-		c.Cleanup()
+		quitCh := make(chan struct{})
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(5)*time.Second)
+		defer cancel()
+
+		// First to send quit, if quit timeout force to do cleanup.
+		go func(c *conn) {
+			c.Quit()
+			close(quitCh)
+		}(c)
+
+		select {
+		case <-ctx.Done():
+			c.Cleanup()
+			close(quitCh)
+		case <-quitCh:
+			c.Cleanup()
+		}
 	}
 	return nil
 }

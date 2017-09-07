@@ -45,6 +45,7 @@ const (
 	COND_DELAY
 	COND_ERROR
 	COND_PANIC
+	COND_STREAM
 )
 
 type Cond struct {
@@ -177,16 +178,16 @@ func (th *TestHandler) ComInitDB(s *Session, db string) error {
 }
 
 // ComQuery impl.
-func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, error) {
+func (th *TestHandler) ComQuery(s *Session, query string, callback func(qr *sqltypes.Result) error) error {
 	log := th.log
 	query = strings.ToLower(query)
-	log.Debug("test.handler.ComQuery:%v", query)
 
 	th.mu.Lock()
 	th.queryCalled[query]++
 	cond := th.conds[query]
 	sessTuple := th.ss[s.ID()]
 	th.mu.Unlock()
+
 	if cond != nil {
 		switch cond.Type {
 		case COND_DELAY:
@@ -194,17 +195,42 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 			select {
 			case <-sessTuple.killed:
 				sessTuple.closed = true
-				return nil, fmt.Errorf("mock.session[%v].query[%s].was.killed...", s.ID(), query)
+				return fmt.Errorf("mock.session[%v].query[%s].was.killed...", s.ID(), query)
 			case <-time.After(time.Millisecond * time.Duration(cond.Delay)):
 				log.Debug("mock.handler.delay.done...")
 			}
-			return cond.Result, nil
+			callback(cond.Result)
+			return nil
 		case COND_ERROR:
-			return nil, cond.Error
+			return cond.Error
 		case COND_PANIC:
 			log.Panic("mock.handler.panic....")
 		case COND_NORMAL:
-			return cond.Result, nil
+			callback(cond.Result)
+			return nil
+		case COND_STREAM:
+			flds := cond.Result.Fields
+			// Send Fields for stream.
+			qr := &sqltypes.Result{Fields: flds, State: sqltypes.RState_Fields}
+			if err := callback(qr); err != nil {
+				return fmt.Errorf("mock.handler.send.stream.error:%+v", err)
+			}
+
+			// Send Row by row for stream.
+			for _, row := range cond.Result.Rows {
+				qr := &sqltypes.Result{Fields: flds, State: sqltypes.RState_Rows}
+				qr.Rows = append(qr.Rows, row)
+				if err := callback(qr); err != nil {
+					return fmt.Errorf("mock.handler.send.stream.error:%+v", err)
+				}
+			}
+
+			// Send EOF for stream.
+			qr = &sqltypes.Result{Fields: flds, State: sqltypes.RState_Finished}
+			if err := callback(qr); err != nil {
+				return fmt.Errorf("mock.handler.send.stream.error:%+v", err)
+			}
+			return nil
 		}
 	}
 
@@ -222,7 +248,8 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 			}
 			th.mu.Unlock()
 		}
-		return &sqltypes.Result{}, nil
+		callback(&sqltypes.Result{})
+		return nil
 	}
 
 	th.mu.Lock()
@@ -230,12 +257,13 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 	// Check query patterns from AddQueryPattern().
 	for _, pat := range th.patternErrors {
 		if pat.expr.MatchString(query) {
-			return nil, pat.err
+			return pat.err
 		}
 	}
 	for _, pat := range th.patterns {
 		if pat.expr.MatchString(query) {
-			return pat.result, nil
+			callback(pat.result)
+			return nil
 		}
 	}
 
@@ -247,10 +275,11 @@ func (th *TestHandler) ComQuery(s *Session, query string) (*sqltypes.Result, err
 			idx = v.idx
 			v.idx++
 		}
-		return v.conds[idx].Result, nil
+		callback(v.conds[idx].Result)
+		return nil
 	}
 
-	return nil, fmt.Errorf("mock.handler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
+	return fmt.Errorf("mock.handler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
 }
 
 // AddQuery used to add a query and its expected result.
@@ -271,6 +300,10 @@ func (th *TestHandler) AddQuerys(query string, results ...*sqltypes.Result) {
 // AddQueryDelay used to add a query and returns the expected result after delay_ms.
 func (th *TestHandler) AddQueryDelay(query string, result *sqltypes.Result, delay_ms int) {
 	th.setCond(&Cond{Type: COND_DELAY, Query: query, Result: result, Delay: delay_ms})
+}
+
+func (th *TestHandler) AddQueryStream(query string, result *sqltypes.Result) {
+	th.setCond(&Cond{Type: COND_STREAM, Query: query, Result: result})
 }
 
 // AddQueryError used to add a query which will be rejected by a error.

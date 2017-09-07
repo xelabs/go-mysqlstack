@@ -8,6 +8,15 @@ import (
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
 
+type ResultState int
+
+const (
+	RState_None ResultState = iota
+	RState_Fields
+	RState_Rows
+	RState_Finished
+)
+
 // Result represents a query result.
 type Result struct {
 	Fields       []*querypb.Field      `json:"fields"`
@@ -17,6 +26,7 @@ type Result struct {
 	Rows         [][]Value             `json:"rows"`
 	Extras       *querypb.ResultExtras `json:"extras"`
 	sorters      []*sorter
+	State        ResultState
 }
 
 // ResultStream is an interface for receiving Result. It is used for

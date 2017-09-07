@@ -10,6 +10,7 @@
 package driver
 
 import (
+	"fmt"
 	"net"
 	"sync"
 
@@ -52,12 +53,7 @@ func (s *Session) writeErrFromError(err error) error {
 	return s.packets.WriteERR(unknow.Num, unknow.State, unknow.Message)
 }
 
-func (s *Session) writeResult(result *sqltypes.Result) error {
-	if len(result.Fields) == 0 {
-		// This is just an INSERT result, send an OK packet.
-		return s.packets.WriteOK(result.RowsAffected, result.InsertID, s.greeting.Status(), result.Warnings)
-	}
-
+func (s *Session) writeFields(result *sqltypes.Result) error {
 	// 1. Write columns.
 	if err := s.packets.AppendColumns(result.Fields); err != nil {
 		return err
@@ -68,7 +64,10 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 			return err
 		}
 	}
+	return nil
+}
 
+func (s *Session) writeRows(result *sqltypes.Result) error {
 	// 2. Append rows.
 	for _, row := range result.Rows {
 		rowBuf := common.NewBuffer(16)
@@ -83,7 +82,10 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 			return err
 		}
 	}
+	return nil
+}
 
+func (s *Session) writeFinish(result *sqltypes.Result) error {
 	// 3. Write EOF.
 	if (s.auth.ClientFlags() & sqldb.CLIENT_DEPRECATE_EOF) == 0 {
 		if err := s.packets.AppendEOF(); err != nil {
@@ -94,12 +96,49 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 			return err
 		}
 	}
-
-	// 4. Write to stream.
-	if err := s.packets.Flush(); err != nil {
-		return err
-	}
 	return nil
+}
+
+func (s *Session) flush() error {
+	// 4. Write to stream.
+	return s.packets.Flush()
+}
+
+func (s *Session) writeResult(result *sqltypes.Result) error {
+	if len(result.Fields) == 0 {
+		if result.State == sqltypes.RState_None {
+			// This is just an INSERT result, send an OK packet.
+			return s.packets.WriteOK(result.RowsAffected, result.InsertID, s.greeting.Status(), result.Warnings)
+		} else {
+			return fmt.Errorf("unexpected: result.without.no.fields.but.has.rows.result:%+v", result)
+		}
+	}
+
+	switch result.State {
+	case sqltypes.RState_None:
+		if err := s.writeFields(result); err != nil {
+			return err
+		}
+		if err := s.writeRows(result); err != nil {
+			return err
+		}
+		if err := s.writeFinish(result); err != nil {
+			return err
+		}
+	case sqltypes.RState_Fields:
+		if err := s.writeFields(result); err != nil {
+			return err
+		}
+	case sqltypes.RState_Rows:
+		if err := s.writeRows(result); err != nil {
+			return err
+		}
+	case sqltypes.RState_Finished:
+		if err := s.writeFinish(result); err != nil {
+			return err
+		}
+	}
+	return s.flush()
 }
 
 func (s *Session) Close() {

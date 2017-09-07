@@ -38,7 +38,7 @@ type Handler interface {
 	ComInitDB(session *Session, database string) error
 
 	// Handle the queries.
-	ComQuery(session *Session, query string) (*sqltypes.Result, error)
+	ComQuery(session *Session, query string, callback func(*sqltypes.Result) error) error
 }
 
 type Listener struct {
@@ -55,9 +55,6 @@ type Listener struct {
 
 	// Incrementing ID for connection id.
 	connectionID uint32
-
-	// sessions maps all sessions.
-	sessions map[uint64]*Session
 }
 
 // NewListener creates a new Listener.
@@ -70,7 +67,6 @@ func NewListener(log *xlog.Log, address string, handler Handler) (*Listener, err
 	return &Listener{
 		log:          log,
 		address:      address,
-		sessions:     make(map[uint64]*Session),
 		handler:      handler,
 		listener:     listener,
 		connectionID: 1,
@@ -182,7 +178,6 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 
 		switch data[0] {
 		case sqldb.COM_QUIT:
-			log.Debug("server.session[%v].com.quit", ID)
 			return
 		case sqldb.COM_INIT_DB:
 			db := l.parserComInitDB(data)
@@ -202,16 +197,14 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 			}
 		case sqldb.COM_QUERY:
 			query := l.parserComQuery(data)
-			var result *sqltypes.Result
-			if result, err = l.handler.ComQuery(session, query); err != nil {
-				log.Error("server.handle.query.from.session[%v].error:%+v", ID, err)
+			if err = l.handler.ComQuery(session, query, func(qr *sqltypes.Result) error {
+				return session.writeResult(qr)
+			}); err != nil {
+				log.Error("server.handle.query.from.session[%v].error:%+v.query[%s]", ID, err, query)
 				if werr := session.writeErrFromError(err); werr != nil {
 					return
 				}
 				continue
-			}
-			if err = session.writeResult(result); err != nil {
-				return
 			}
 		default:
 			cmd := sqldb.CommandString(data[0])

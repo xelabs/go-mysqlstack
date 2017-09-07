@@ -214,7 +214,9 @@ func (b *Buffer) ReadLenEncode() (v uint64, err error) {
 
 	switch u8 {
 	case 0xfb:
-		v = 0
+		// nil value
+		// we set the length to maxuint64.
+		v = ^uint64(0)
 		return
 
 	case 0xfc:
@@ -274,12 +276,17 @@ func (b *Buffer) ReadLenEncodeBytes() (v []byte, err error) {
 		return
 	}
 
-	if l > 0 {
+	// nil value.
+	if l == ^uint64(0) {
+		return
+	}
+
+	if l == 0 {
+		return []byte{}, nil
+	} else {
 		if v, err = b.ReadBytes(int(l)); err != nil {
 			return
 		}
-	} else {
-		v = nil
 	}
 	return
 }

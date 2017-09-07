@@ -87,6 +87,7 @@ func forceEOF(yylex interface{}) {
   convertType   *ConvertType
   aliasedTableName *AliasedTableExpr
   TableSpec  *TableSpec
+  TableOptions TableOptions
   columnType    ColumnType
   colKeyOpt     ColumnKeyOption
   optVal        *SQLVal
@@ -146,7 +147,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> BIT TINYINT SMALLINT MEDIUMINT INT INTEGER BIGINT INTNUM
 %token <bytes> REAL DOUBLE FLOAT_TYPE DECIMAL NUMERIC
 %token <bytes> TIME TIMESTAMP DATETIME YEAR
-%token <bytes> CHAR VARCHAR BOOL CHARACTER VARBINARY NCHAR
+%token <bytes> CHAR VARCHAR BOOL CHARACTER VARBINARY NCHAR CHARSET
 %token <bytes> TEXT TINYTEXT MEDIUMTEXT LONGTEXT
 %token <bytes> BLOB TINYBLOB MEDIUMBLOB LONGBLOB JSON ENUM
 
@@ -173,7 +174,7 @@ func forceEOF(yylex interface{}) {
 // RadonDB
 %token <empty> PARTITION PARTITIONS HASH XA
 %type <statement> truncate_statement xa_statement explain_statement kill_statement transaction_statement
-%token <bytes> ENGINES STATUS VERSIONS PROCESSLIST QUERYZ TXNZ KILL START TRANSACTION COMMIT SESSION
+%token <bytes> ENGINES STATUS VERSIONS PROCESSLIST QUERYZ TXNZ KILL START TRANSACTION COMMIT SESSION ENGINE
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -226,8 +227,8 @@ func forceEOF(yylex interface{}) {
 %type <updateExpr> update_expression
 %type <bytes> for_from
 %type <str> ignore_opt default_opt
-%type <byt> exists_opt
-%type <empty> not_exists_opt non_rename_operation to_opt index_opt
+%type <byt> exists_opt not_exists_opt
+%type <empty> non_rename_operation to_opt index_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <tableIdent> table_id reserved_table_id table_alias as_opt_id
@@ -239,7 +240,7 @@ func forceEOF(yylex interface{}) {
 %type <columnType> column_type
 %type <columnType> int_type decimal_type numeric_type time_type char_type
 %type <optVal> length_opt column_default_opt column_comment_opt
-%type <str> charset_opt collate_opt
+%type <str> charset_opt collate_opt charset_option engine_option autoincrement_option
 %type <boolVal> unsigned_opt zero_fill_opt
 %type <LengthScaleOption> float_length_opt decimal_length_opt
 %type <boolVal> null_opt auto_increment_opt
@@ -249,7 +250,7 @@ func forceEOF(yylex interface{}) {
 %type <indexDefinition> index_definition
 %type <str> index_or_key
 %type <TableSpec> table_spec table_column_list
-%type <str> table_option_list table_option table_opt_value
+%type <TableOptions> table_option_list
 %type <indexInfo> index_info
 %type <indexColumn> index_column
 %type <indexColumns> index_column_list
@@ -407,7 +408,11 @@ create_statement:
   }
 | CREATE DATABASE not_exists_opt table_id
   {
-    $$ = &DDL{Action: CreateDBStr, Database: $4}
+    var ifnotexists bool
+    if $3 != 0 {
+      ifnotexists= true
+    }
+    $$ = &DDL{Action: CreateDBStr, IfNotExists:ifnotexists, Database: $4}
   }
 | CREATE INDEX ID ON table_name ddl_force_eof
   {
@@ -418,7 +423,11 @@ create_statement:
 create_table_prefix:
   CREATE TABLE not_exists_opt table_name
   {
-    $$ = &DDL{Action: CreateTableStr, Table: $4, NewName: $4}
+    var ifnotexists bool
+    if $3 != 0 {
+      ifnotexists= true
+    }
+    $$ = &DDL{Action: CreateTableStr, IfNotExists:ifnotexists, Table: $4, NewName: $4}
     setDDL(yylex, $$)
   }
 
@@ -428,6 +437,40 @@ table_spec:
     $$ = $2
     $$.Options = $4
   }
+
+table_option_list:
+ engine_option autoincrement_option charset_option
+  {
+    $$.Engine = $1
+    $$.Charset = $3
+  }
+
+engine_option:
+ {
+   $$=""
+ }
+| ENGINE '=' ID
+ {
+   $$ = string($3)
+ }
+
+charset_option:
+ {
+    $$=""
+ }
+| DEFAULT CHARSET '=' ID
+ {
+   $$ = string($4)
+ }
+
+autoincrement_option:
+ {
+    $$=""
+ }
+| AUTO_INCREMENT '=' INTEGRAL
+ {
+ }
+
 
 table_column_list:
   column_definition
@@ -831,49 +874,6 @@ index_column:
       $$ = &IndexColumn{Column: $1, Length: $2}
   }
 
-table_option_list:
-  {
-    $$ = ""
-  }
-| table_option
-  {
-    $$ = " " + string($1)
-  }
-| table_option_list ',' table_option
-  {
-    $$ = string($1) + ", " + string($3)
-  }
-
-// rather than explicitly parsing the various keywords for table options,
-// just accept any number of keywords, IDs, strings, numbers, and '='
-table_option:
-  table_opt_value
-  {
-    $$ = $1
-  }
-| table_option table_opt_value
-  {
-    $$ = $1 + " " + $2
-  }
-| table_option '=' table_opt_value
-  {
-    $$ = $1 + "=" + $3
-  }
-
-table_opt_value:
-  reserved_sql_id
-  {
-    $$ = $1.String()
-  }
-| STRING
-  {
-    $$ = "'" + string($1) + "'"
-  }
-| INTEGRAL
-  {
-    $$ = string($1)
-  }
-
 alter_statement:
   ALTER ignore_opt TABLE table_name non_rename_operation force_eof
   {
@@ -889,10 +889,15 @@ alter_statement:
     // Rename an index can just be an alter
     $$ = &DDL{Action: AlterStr, Table: $4, NewName: $4}
   }
-| ALTER ignore_opt TABLE table_name ID '=' ID
+| ALTER ignore_opt TABLE table_name ENGINE '=' ID
   {
-    $$ = &DDL{Action: AlterEngineStr, Table: $4, Engine: string($7)}
+    $$ = &DDL{Action: AlterEngineStr, Table: $4, NewName:$4, Engine: string($7)}
   }
+| ALTER ignore_opt TABLE table_name CONVERT TO CHARACTER SET ID
+  {
+    $$ = &DDL{Action: AlterCharsetStr, Table: $4, NewName:$4, Charset: string($9)}
+  }
+
 
 drop_statement:
   DROP TABLE exists_opt table_name
@@ -2185,9 +2190,9 @@ exists_opt:
   { $$ = 1 }
 
 not_exists_opt:
-  { $$ = struct{}{} }
+  { $$ = 0 }
 | IF NOT EXISTS
-  { $$ = struct{}{} }
+  { $$ = 1 }
 
 ignore_opt:
   { $$ = "" }
@@ -2282,6 +2287,7 @@ reserved_keyword:
 | BY
 | CASE
 | CHARACTER
+| CHARSET
 | COLLATE
 | CONVERT
 | CREATE
@@ -2389,6 +2395,7 @@ non_reserved_keyword:
 | DOUBLE
 | DUPLICATE
 | ENUM
+| ENGINE
 | EXPANSION
 | FLOAT_TYPE
 | INT

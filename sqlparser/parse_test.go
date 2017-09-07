@@ -649,7 +649,7 @@ func TestValid(t *testing.T) {
 		input: "create table `by` (\n\t`by` char\n)",
 	}, {
 		input:  "create table if not exists a (\n\t`a` int\n)",
-		output: "create table a (\n\t`a` int\n)",
+		output: "create table if not exists a (\n\t`a` int\n)",
 	}, {
 		input:  "create index a on b",
 		output: "create index a on b",
@@ -1050,7 +1050,7 @@ func TestCreateTable(t *testing.T) {
 		"create table t (\n" +
 			"	`id` int primary key,\n" +
 			"	`name` varchar(10)\n" +
-			") engine=tokudb",
+			")",
 
 		// test all the data types and options
 		"create table t (\n" +
@@ -1156,33 +1156,7 @@ func TestCreateTable(t *testing.T) {
 		// table options
 		"create table t (\n" +
 			"	`id` int auto_increment\n" +
-			") engine InnoDB,\n" +
-			"  auto_increment 123,\n" +
-			"  avg_row_length 1,\n" +
-			"  default character set utf8mb4,\n" +
-			"  character set latin1,\n" +
-			"  checksum 0,\n" +
-			"  default collate binary,\n" +
-			"  collate ascii_bin,\n" +
-			"  comment 'this is a comment',\n" +
-			"  compression 'zlib',\n" +
-			"  connection 'connect_string',\n" +
-			"  data directory 'absolute path to directory',\n" +
-			"  delay_key_write 1,\n" +
-			"  encryption 'n',\n" +
-			"  index directory 'absolute path to directory',\n" +
-			"  insert_method no,\n" +
-			"  key_block_size 1024,\n" +
-			"  max_rows 100,\n" +
-			"  min_rows 10,\n" +
-			"  pack_keys 0,\n" +
-			"  password 'sekret',\n" +
-			"  row_format default,\n" +
-			"  stats_auto_recalc default,\n" +
-			"  stats_persistent 0,\n" +
-			"  stats_sample_pages 1,\n" +
-			"  tablespace tablespace_name storage disk,\n" +
-			"  tablespace tablespace_name\n",
+			") default charset=utf8mb4\n",
 	}
 	for _, sql := range validSQL {
 		sql = strings.TrimSpace(sql)

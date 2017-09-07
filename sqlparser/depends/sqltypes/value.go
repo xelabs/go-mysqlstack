@@ -236,6 +236,16 @@ func (v Value) Len() int {
 	return len(v.val)
 }
 
+type Values []Value
+
+func (vs Values) Len() int {
+	len := 0
+	for _, v := range vs {
+		len += v.Len()
+	}
+	return len
+}
+
 // String returns the raw value as a string.
 func (v Value) String() string {
 	return hack.String(v.val)

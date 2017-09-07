@@ -118,7 +118,6 @@ func (r *TextRows) RowValues() ([]sqltypes.Value, error) {
 			return nil, err
 		}
 
-		// if v is NIL, it's a NULL column
 		if v != nil {
 			r.bytes += len(v)
 			result[i] = sqltypes.MakeTrusted(r.fields[i].Type, v)

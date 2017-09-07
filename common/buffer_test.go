@@ -314,6 +314,11 @@ func TestBufferLenEncode(t *testing.T) {
 		writer.WriteLenEncode(v)
 	}
 
+	{
+		v := uint64(0)
+		writer.WriteLenEncode(v)
+	}
+
 	read := ReadBuffer(writer.Datas())
 
 	{
@@ -337,7 +342,7 @@ func TestBufferLenEncode(t *testing.T) {
 	{
 		v, err := read.ReadLenEncode()
 		assert.Nil(t, err)
-		assert.Equal(t, v, uint64(0))
+		assert.Equal(t, v, ^uint64(0))
 	}
 
 	{
@@ -351,6 +356,12 @@ func TestBufferLenEncode(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, v, uint64(1<<24+1))
 	}
+	{
+		v, err := read.ReadLenEncode()
+		assert.Nil(t, err)
+		assert.Equal(t, v, uint64(0))
+	}
+
 }
 
 func TestBufferLenEncodeString(t *testing.T) {
@@ -359,12 +370,16 @@ func TestBufferLenEncodeString(t *testing.T) {
 
 	s1 := "BohuTANG"
 	b1 := []byte{0x01, 0x02}
+	b11 := []byte{}
+	b12 := []byte(nil)
 	{
 		v := uint64(len(s1))
 		writer.WriteLenEncode(v)
 		writer.WriteString(s1)
 		writer.WriteLenEncodeString(s1)
 		writer.WriteLenEncodeBytes(b1)
+		writer.WriteLenEncodeNUL()
+		writer.WriteLenEncodeBytes(b11)
 		reader.Reset(writer.Datas())
 	}
 
@@ -384,6 +399,18 @@ func TestBufferLenEncodeString(t *testing.T) {
 		got, err := reader.ReadLenEncodeBytes()
 		assert.Nil(t, err)
 		assert.Equal(t, b1, got)
+	}
+
+	{
+		got, err := reader.ReadLenEncodeBytes()
+		assert.Nil(t, err)
+		assert.Equal(t, b12, got)
+	}
+
+	{
+		got, err := reader.ReadLenEncodeBytes()
+		assert.Nil(t, err)
+		assert.Equal(t, b11, got)
 	}
 }
 

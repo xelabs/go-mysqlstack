@@ -155,6 +155,7 @@ type Select struct {
 	OrderBy     OrderBy
 	Limit       *Limit
 	Lock        string
+	ForBackup   string
 }
 
 // Select.Distinct
@@ -480,9 +481,11 @@ func (node *Set) WalkSubtree(visit Visit) error {
 type DDL struct {
 	Action        string
 	Engine        string
+	Charset       string
 	IndexName     string
 	PartitionName string
 	IfExists      bool
+	IfNotExists   bool
 	Table         TableName
 	NewName       TableName
 	Database      TableIdent
@@ -499,7 +502,8 @@ const (
 	DropTableStr            = "drop table"
 	DropIndexStr            = "drop index"
 	AlterStr                = "alter"
-	AlterEngineStr          = "alter table engine"
+	AlterEngineStr          = "alter table"
+	AlterCharsetStr         = "alter table charset"
 	RenameStr               = "rename"
 	TruncateTableStr        = "truncate table"
 )
@@ -508,18 +512,26 @@ const (
 func (node *DDL) Format(buf *TrackedBuffer) {
 	switch node.Action {
 	case CreateDBStr:
-		buf.Myprintf("%s %s", node.Action, node.Database.String())
+		ifnotexists := ""
+		if node.IfNotExists {
+			ifnotexists = " if not exists"
+		}
+		buf.Myprintf("%s%s %s", node.Action, ifnotexists, node.Database.String())
 	case DropDBStr:
 		exists := ""
 		if node.IfExists {
 			exists = " if exists"
 		}
-		buf.Myprintf("%s%s %v", node.Action, exists, node.Database.String())
+		buf.Myprintf("%s%s %s", node.Action, exists, node.Database.String())
 	case CreateTableStr:
+		ifnotexists := ""
+		if node.IfNotExists {
+			ifnotexists = " if not exists"
+		}
 		if node.TableSpec == nil {
-			buf.Myprintf("%s %v", node.Action, node.NewName)
+			buf.Myprintf("%s%s %v", node.Action, ifnotexists, node.NewName)
 		} else {
-			buf.Myprintf("%s %v %v", node.Action, node.NewName, node.TableSpec)
+			buf.Myprintf("%s%s %v %v", node.Action, ifnotexists, node.NewName, node.TableSpec)
 		}
 	case CreateIndexStr:
 		buf.Myprintf("%s %s on %v", node.Action, node.IndexName, node.NewName)
@@ -536,7 +548,9 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 	case AlterStr:
 		buf.Myprintf("%s table %v", node.Action, node.NewName)
 	case AlterEngineStr:
-		buf.Myprintf("alter table %v engine = %s", node.NewName, node.Engine)
+		buf.Myprintf("%s %v engine = %s", node.Action, node.NewName, node.Engine)
+	case AlterCharsetStr:
+		buf.Myprintf("alter table %v convert to character set %s", node.NewName, node.Charset)
 	case TruncateTableStr:
 		buf.Myprintf("%s %v", node.Action, node.NewName)
 	}
@@ -554,11 +568,32 @@ func (node *DDL) WalkSubtree(visit Visit) error {
 	)
 }
 
+type TableOptions struct {
+	Engine  string
+	Charset string
+}
+
+// Format formats the node.
+func (opts TableOptions) Format(buf *TrackedBuffer) {
+	if opts.Engine != "" {
+		buf.Myprintf(" engine=%s", opts.Engine)
+	}
+
+	if opts.Charset != "" {
+		buf.Myprintf(" default charset=%s", opts.Charset)
+	}
+}
+
+// WalkSubtree walks the nodes of the subtree.
+func (opts TableOptions) WalkSubtree(visit Visit) error {
+	return nil
+}
+
 // TableSpec describes the structure of a table from a CREATE TABLE statement
 type TableSpec struct {
 	Columns []*ColumnDefinition
 	Indexes []*IndexDefinition
-	Options string
+	Options TableOptions
 }
 
 // Format formats the node.
@@ -574,8 +609,7 @@ func (ts *TableSpec) Format(buf *TrackedBuffer) {
 	for _, idx := range ts.Indexes {
 		buf.Myprintf(",\n\t%v", idx)
 	}
-
-	buf.Myprintf("\n)%s", strings.Replace(ts.Options, ", ", ",\n  ", -1))
+	buf.Myprintf("\n)%v", ts.Options)
 }
 
 // AddColumn appends the given column to the list in the spec

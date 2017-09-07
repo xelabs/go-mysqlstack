@@ -138,3 +138,55 @@ func TestClientFetchAllWithFunc(t *testing.T) {
 		assert.Equal(t, want, got)
 	}
 }
+
+func TestClientStream(t *testing.T) {
+	want := &sqltypes.Result{
+		Fields: []*querypb.Field{
+			{
+				Name: "id",
+				Type: querypb.Type_INT32,
+			},
+			{
+				Name: "name",
+				Type: querypb.Type_VARCHAR,
+			},
+		},
+		Rows: make([][]sqltypes.Value, 0, 256)}
+
+	for i := 0; i < 2017; i++ {
+		row := []sqltypes.Value{
+			sqltypes.MakeTrusted(querypb.Type_INT32, []byte("11")),
+			sqltypes.MakeTrusted(querypb.Type_VARCHAR, []byte("1nice name")),
+		}
+		want.Rows = append(want.Rows, row)
+	}
+
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	svr, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	defer svr.Close()
+	address := svr.Addr()
+
+	// query
+	{
+		client, err := NewConn("mock", "mock", address, "test", "")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		th.AddQueryStream("SELECT2", want)
+		rows, err := client.Query("SELECT2")
+		assert.Nil(t, err)
+
+		got := &sqltypes.Result{
+			Fields: rows.Fields(),
+			Rows:   make([][]sqltypes.Value, 0, 256)}
+
+		for rows.Next() {
+			row, err := rows.RowValues()
+			assert.Nil(t, err)
+			got.Rows = append(got.Rows, row)
+		}
+		assert.Equal(t, want, got)
+	}
+}
