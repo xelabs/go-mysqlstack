@@ -146,24 +146,23 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 		return
 	}
 
-	// Check the database.
-	db := session.auth.Database()
-	if db != "" {
-		if err = l.handler.ComInitDB(session, db); err != nil {
-			if werr := session.writeErrFromError(err); werr != nil {
-				return
-			}
-			return
-		}
-		session.SetSchema(db)
-	}
-
 	//  Auth check.
 	if err = l.handler.AuthCheck(session); err != nil {
 		log.Warning("server.user[%+v].auth.check.failed", session.User())
 		session.writeErrFromError(err)
 		return
 	} else {
+		// Check the database.
+		db := session.auth.Database()
+		if db != "" {
+			if err = l.handler.ComInitDB(session, db); err != nil {
+				log.Error("server.cominitdb[%s].error:%+v", db, err)
+				session.writeErrFromError(err)
+				return
+			}
+			session.SetSchema(db)
+		}
+
 		if err = session.packets.WriteOK(0, 0, session.greeting.Status(), 0); err != nil {
 			return
 		}

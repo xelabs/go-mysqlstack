@@ -605,12 +605,6 @@ func TestValid(t *testing.T) {
 	}, {
 		input: "delete /* limit */ from a limit b",
 	}, {
-		input:  "set /* simple */ a = 3",
-		output: "set a = 3",
-	}, {
-		input:  "set /* list */ a = 3, b = 4",
-		output: "set a = 3, b = 4",
-	}, {
 		input:  "alter ignore table a add foo",
 		output: "alter table a",
 	}, {

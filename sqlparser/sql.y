@@ -155,7 +155,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL
 
 // Supported SHOW tokens
-%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VSCHEMA_TABLES
+%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VSCHEMA_TABLES WARNINGS VARIABLES
 
 // Functions
 %token <bytes> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
@@ -383,13 +383,9 @@ delete_statement:
   }
 
 set_statement:
-  SET comment_opt update_list
+  SET force_eof
   {
-    $$ = &Set{Comments: Comments($2), Exprs: $3}
-  }
-| SET SESSION update_list
-  {
-    $$ = &Set{Exprs: $3}
+    $$ = &Set{}
   }
 
 create_statement:
@@ -997,6 +993,14 @@ show_statement:
 | SHOW CREATE DATABASE table_name force_eof
   {
     $$ = &Show{Type: ShowCreateDatabaseStr, Database: $4}
+  }
+| SHOW WARNINGS force_eof
+  {
+    $$ = &Show{Type: ShowWarningsStr}
+  }
+| SHOW VARIABLES force_eof
+  {
+    $$ = &Show{Type: ShowVariablesStr}
   }
 
 use_statement:

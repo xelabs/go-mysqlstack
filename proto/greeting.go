@@ -10,7 +10,8 @@
 package proto
 
 import (
-	"crypto/rand"
+	"math/rand"
+	"time"
 
 	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/XeLabs/go-mysqlstack/sqldb"
@@ -39,7 +40,7 @@ type Greeting struct {
 func NewGreeting(connectionID uint32) *Greeting {
 	greeting := &Greeting{
 		protocolVersion: 10,
-		serverVersion:   "Radon 5.7",
+		serverVersion:   "5.7-Radon-1.0",
 		ConnectionID:    connectionID,
 		Capability:      DefaultServerCapability,
 		Charset:         sqldb.CharacterSetUtf8,
@@ -47,12 +48,16 @@ func NewGreeting(connectionID uint32) *Greeting {
 		Salt:            make([]byte, 20),
 	}
 
-	// Generate the rand salts.
-	// Set to default if rand fail.
-	if _, err := rand.Read(greeting.Salt); err != nil {
-		greeting.Salt = DefaultSalt
+	// Generate the rand salts, range [1, 123].
+	for i := 0; i < len(greeting.Salt); i++ {
+		greeting.Salt[i] = byteRand(1, 123)
 	}
 	return greeting
+}
+
+func byteRand(min int, max int) byte {
+	rand.Seed(time.Now().UTC().UnixNano())
+	return byte(min + rand.Intn(max-min))
 }
 
 func (g *Greeting) Status() uint16 {

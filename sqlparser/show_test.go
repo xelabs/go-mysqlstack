@@ -78,6 +78,16 @@ func TestShow1(t *testing.T) {
 			input:  "show txnz",
 			output: "show txnz",
 		},
+
+		{
+			input:  "show warnings",
+			output: "show warnings",
+		},
+
+		{
+			input:  "show variables",
+			output: "show variables",
+		},
 	}
 
 	for _, show := range validSQL {

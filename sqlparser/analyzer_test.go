@@ -377,54 +377,6 @@ func TestStringIn(t *testing.T) {
 	}
 }
 
-func TestExtractSetValues(t *testing.T) {
-	testcases := []struct {
-		sql string
-		out map[string]interface{}
-		err string
-	}{{
-		sql: "invalid",
-		err: "syntax error at position 8 near 'invalid'",
-	}, {
-		sql: "select * from t",
-		err: "ast did not yield *sqlparser.Set: *sqlparser.Select",
-	}, {
-		sql: "set a.autocommit=1",
-		err: "invalid syntax: a.autocommit",
-	}, {
-		sql: "set autocommit=1+1",
-		err: "invalid syntax: 1 + 1",
-	}, {
-		sql: "set transaction_mode='single'",
-		out: map[string]interface{}{"transaction_mode": "single"},
-	}, {
-		sql: "set autocommit=1",
-		out: map[string]interface{}{"autocommit": int64(1)},
-	}, {
-		sql: "set AUTOCOMMIT=1",
-		out: map[string]interface{}{"autocommit": int64(1)},
-	}, {
-		sql: "SET character_set_results = NULL",
-		out: map[string]interface{}{"character_set_results": nil},
-	}, {
-		sql: "SET foo = 0x1234",
-		err: "invalid value type: 0x1234",
-	}}
-	for _, tcase := range testcases {
-		out, err := ExtractSetValues(tcase.sql)
-		if tcase.err != "" {
-			if err == nil || err.Error() != tcase.err {
-				t.Errorf("ExtractSetNums(%s): %v, want '%s'", tcase.sql, err, tcase.err)
-			}
-		} else if err != nil {
-			t.Errorf("ExtractSetNums(%s): %v, want no error", tcase.sql, err)
-		}
-		if !reflect.DeepEqual(out, tcase.out) {
-			t.Errorf("ExtractSetNums(%s): %v, want '%v'", tcase.sql, out, tcase.out)
-		}
-	}
-}
-
 func newStrVal(in string) *SQLVal {
 	return NewStrVal([]byte(in))
 }

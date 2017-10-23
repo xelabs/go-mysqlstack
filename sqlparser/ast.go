@@ -460,7 +460,7 @@ type Set struct {
 
 // Format formats the node.
 func (node *Set) Format(buf *TrackedBuffer) {
-	buf.Myprintf("set %v%v", node.Comments, node.Exprs)
+	buf.Myprintf("set")
 }
 
 // WalkSubtree walks the nodes of the subtree.
@@ -970,6 +970,8 @@ const (
 	ShowProcesslistStr    = "processlist"
 	ShowQueryzStr         = "queryz"
 	ShowTxnzStr           = "txnz"
+	ShowWarningsStr       = "warnings"
+	ShowVariablesStr      = "variables"
 	ShowUnsupportedStr    = "unsupported"
 )
 

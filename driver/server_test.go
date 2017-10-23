@@ -208,7 +208,7 @@ func TestServerSessionClose(t *testing.T) {
 }
 
 func TestServerComInitDB(t *testing.T) {
-	log := xlog.NewStdLog(xlog.Level(xlog.ERROR))
+	log := xlog.NewStdLog(xlog.Level(xlog.INFO))
 	th := NewTestHandler(log)
 	svr, err := MockMysqlServer(log, th)
 	assert.Nil(t, err)

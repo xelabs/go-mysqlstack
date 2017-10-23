@@ -26,12 +26,16 @@ func TestSet(t *testing.T) {
 	}{
 		{
 			input:  "SET autocommit=0",
-			output: "set autocommit = 0",
+			output: "set",
 		},
 
 		{
 			input:  "SET SESSION wait_timeout = 2147483",
-			output: "set wait_timeout = 2147483",
+			output: "set",
+		},
+		{
+			input:  "SET NAMES utf8",
+			output: "set",
 		},
 	}
 
