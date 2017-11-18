@@ -169,7 +169,6 @@ func TestDDL1(t *testing.T) {
 			input:  "alter table test engine=tokudb",
 			output: "alter table test engine = tokudb",
 		},
-
 		{
 			input:  "alter table test.t1 engine=tokudb",
 			output: "alter table test.t1 engine = tokudb",
@@ -189,6 +188,37 @@ func TestDDL1(t *testing.T) {
 		{
 			input:  "drop index idx on test",
 			output: "drop index idx on test",
+		},
+
+		// Add column.
+		{
+			input: "alter table test add column(id int primary key)",
+			output: "alter table test add column (\n" +
+				"	`id` int primary key\n" +
+				")",
+		},
+		{
+			input: "alter table test add column(id int primary key, name varchar(100))",
+			output: "alter table test add column (\n" +
+				"	`id` int primary key,\n" +
+				"	`name` varchar(100)\n" +
+				")",
+		},
+
+		// Modify column.
+		{
+			input:  "alter table test modify column name varchar(200)",
+			output: "alter table test modify column `name` varchar(200)",
+		},
+		{
+			input:  "alter table test modify column name varchar(200) not null",
+			output: "alter table test modify column `name` varchar(200) not null",
+		},
+
+		// Drop column.
+		{
+			input:  "alter table test drop column name",
+			output: "alter table test drop column `name`",
 		},
 	}
 

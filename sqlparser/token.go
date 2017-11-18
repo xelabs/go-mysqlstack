@@ -61,7 +61,7 @@ func NewStringTokenizer(sql string) *Tokenizer {
 // in identifiers. See the docs for each grammar to determine which one to put it into.
 var keywords = map[string]int{
 	"accessible":          UNUSED,
-	"add":                 UNUSED,
+	"add":                 ADD,
 	"against":             AGAINST,
 	"all":                 ALL,
 	"alter":               ALTER,
@@ -91,7 +91,7 @@ var keywords = map[string]int{
 	"charset":             CHARSET,
 	"check":               UNUSED,
 	"collate":             COLLATE,
-	"column":              UNUSED,
+	"column":              COLUMN,
 	"comment":             COMMENT_KEYWORD,
 	"commit":              COMMIT,
 	"condition":           UNUSED,
@@ -218,6 +218,7 @@ var keywords = map[string]int{
 	"minute_second":       UNUSED,
 	"mod":                 MOD,
 	"mode":                MODE,
+	"modify":              MODIFY,
 	"modifies":            UNUSED,
 	"natural":             NATURAL,
 	"nchar":               NCHAR,

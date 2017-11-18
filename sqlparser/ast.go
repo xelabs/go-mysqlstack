@@ -490,6 +490,10 @@ type DDL struct {
 	NewName       TableName
 	Database      TableIdent
 	TableSpec     *TableSpec
+
+	// table column operation
+	DropColumnName  string
+	ModifyColumnDef *ColumnDefinition
 }
 
 // DDL strings.
@@ -504,6 +508,9 @@ const (
 	AlterStr                = "alter"
 	AlterEngineStr          = "alter table"
 	AlterCharsetStr         = "alter table charset"
+	AlterAddColumnStr       = "alter table add column"
+	AlterDropColumnStr      = "alter table drop column"
+	AlterModifyColumnStr    = "alter table modify column"
 	RenameStr               = "rename"
 	TruncateTableStr        = "truncate table"
 )
@@ -551,6 +558,12 @@ func (node *DDL) Format(buf *TrackedBuffer) {
 		buf.Myprintf("%s %v engine = %s", node.Action, node.NewName, node.Engine)
 	case AlterCharsetStr:
 		buf.Myprintf("alter table %v convert to character set %s", node.NewName, node.Charset)
+	case AlterAddColumnStr:
+		buf.Myprintf("alter table %v add column %v", node.NewName, node.TableSpec)
+	case AlterDropColumnStr:
+		buf.Myprintf("alter table %v drop column `%s`", node.NewName, node.DropColumnName)
+	case AlterModifyColumnStr:
+		buf.Myprintf("alter table %v modify column %v", node.NewName, node.ModifyColumnDef)
 	case TruncateTableStr:
 		buf.Myprintf("%s %v", node.Action, node.NewName)
 	}

@@ -139,8 +139,8 @@ func forceEOF(yylex interface{}) {
 %token <empty> JSON_EXTRACT_OP JSON_UNQUOTE_EXTRACT_OP
 
 // DDL Tokens
-%token <bytes> CREATE ALTER DROP RENAME ANALYZE
-%token <bytes> TABLE INDEX VIEW TO IGNORE IF UNIQUE USING PRIMARY
+%token <bytes> CREATE ALTER DROP RENAME ANALYZE ADD MODIFY
+%token <bytes> TABLE INDEX VIEW TO IGNORE IF UNIQUE USING PRIMARY COLUMN
 %token <bytes> SHOW DESCRIBE EXPLAIN DATE ESCAPE REPAIR OPTIMIZE TRUNCATE
 
 // Type Tokens
@@ -892,6 +892,18 @@ alter_statement:
 | ALTER ignore_opt TABLE table_name CONVERT TO CHARACTER SET ID
   {
     $$ = &DDL{Action: AlterCharsetStr, Table: $4, NewName:$4, Charset: string($9)}
+  }
+| ALTER ignore_opt TABLE table_name ADD COLUMN table_spec
+  {
+    $$ = &DDL{Action: AlterAddColumnStr, Table: $4, NewName:$4, TableSpec:$7}
+  }
+| ALTER ignore_opt TABLE table_name DROP COLUMN ID
+  {
+    $$ = &DDL{Action: AlterDropColumnStr, Table: $4, NewName:$4, DropColumnName:string($7)}
+  }
+| ALTER ignore_opt TABLE table_name MODIFY COLUMN column_definition
+  {
+    $$ = &DDL{Action: AlterModifyColumnStr, Table: $4, NewName:$4, ModifyColumnDef:$7}
   }
 
 

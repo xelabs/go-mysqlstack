@@ -605,15 +605,6 @@ func TestValid(t *testing.T) {
 	}, {
 		input: "delete /* limit */ from a limit b",
 	}, {
-		input:  "alter ignore table a add foo",
-		output: "alter table a",
-	}, {
-		input:  "alter table a add foo",
-		output: "alter table a",
-	}, {
-		input:  "alter table `By` add foo",
-		output: "alter table `By`",
-	}, {
 		input:  "alter table a alter foo",
 		output: "alter table a",
 	}, {
