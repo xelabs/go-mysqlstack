@@ -190,3 +190,93 @@ func TestClientStream(t *testing.T) {
 		assert.Equal(t, want, got)
 	}
 }
+
+func TestMock(t *testing.T) {
+	result1 := &sqltypes.Result{
+		RowsAffected: 123,
+		InsertID:     123456789,
+	}
+	result2 := &sqltypes.Result{
+		RowsAffected: 123,
+		InsertID:     123456789,
+	}
+
+	log := xlog.NewStdLog(xlog.Level(xlog.DEBUG))
+	th := NewTestHandler(log)
+	svr, err := MockMysqlServer(log, th)
+	assert.Nil(t, err)
+	defer svr.Close()
+	address := svr.Addr()
+
+	{
+		th.AddQuery("SELECT2", result2)
+
+		client, err := NewConn("mock", "mock", address, "test", "")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		// connection ID
+		assert.Equal(t, uint32(1), client.ConnectionID())
+
+		rows, err := client.Query("SELECT2")
+		assert.Nil(t, err)
+
+		assert.Equal(t, uint64(123), rows.RowsAffected())
+		assert.Equal(t, uint64(123456789), rows.LastInsertID())
+	}
+
+	{
+		th.AddQueryPattern("SELECT3 .*", result2)
+
+		client, err := NewConn("mock", "mock", address, "test", "")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		_, err = client.Query("SELECT3 * from t1")
+		assert.Nil(t, err)
+	}
+
+	{
+		th.AddQueryErrorPattern("SELECT4 .*", errors.New("select4.mock.error"))
+
+		client, err := NewConn("mock", "mock", address, "test", "")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		_, err = client.Query("SELECT4 * from t1")
+		assert.NotNil(t, err)
+	}
+
+	{
+		th.AddQueryDelay("SELECT5", result2, 10)
+
+		client, err := NewConn("mock", "mock", address, "test", "")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		_, err = client.Query("SELECT5")
+		assert.Nil(t, err)
+	}
+
+	{
+		th.AddQuerys("s6", result1, result2)
+
+		client, err := NewConn("mock", "mock", address, "test", "")
+		assert.Nil(t, err)
+		defer client.Close()
+
+		_, err = client.Query("s6")
+		assert.Nil(t, err)
+	}
+
+	// Query num.
+	{
+		got := th.GetQueryCalledNum("SELECT2")
+		want := 1
+		assert.Equal(t, want, got)
+	}
+
+	th.ResetPatternErrors()
+	th.ResetErrors()
+	th.ResetAll()
+}

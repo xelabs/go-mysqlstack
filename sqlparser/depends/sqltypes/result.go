@@ -85,23 +85,6 @@ func (result *Result) Copy() *Result {
 	return out
 }
 
-// MakeRowTrusted converts a *querypb.Row to []Value based on the types
-// in fields. It does not sanity check the values against the type.
-// Every place this function is called, a comment is needed that explains
-// why it's justified.
-func MakeRowTrusted(fields []*querypb.Field, row *querypb.Row) []Value {
-	sqlRow := make([]Value, len(row.Lengths))
-	var offset int64
-	for i, length := range row.Lengths {
-		if length < 0 {
-			continue
-		}
-		sqlRow[i] = MakeTrusted(fields[i].Type, row.Values[offset:offset+length])
-		offset += length
-	}
-	return sqlRow
-}
-
 // StripFieldNames will return a new Result that has the same Rows,
 // but the Field objects will have their Name emptied.  Note we don't
 // proto.Copy each Field for performance reasons, but we only copy the

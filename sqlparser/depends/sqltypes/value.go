@@ -7,7 +7,6 @@ package sqltypes
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -361,49 +360,6 @@ func (v Value) IsText() bool {
 // IsBinary returns true if Value is binary.
 func (v Value) IsBinary() bool {
 	return IsBinary(v.typ)
-}
-
-// MarshalJSON should only be used for testing.
-// It's not a complete implementation.
-func (v Value) MarshalJSON() ([]byte, error) {
-	switch {
-	case v.IsQuoted():
-		return json.Marshal(v.String())
-	case v.typ == Null:
-		return nullstr, nil
-	}
-	return v.val, nil
-}
-
-// UnmarshalJSON should only be used for testing.
-// It's not a complete implementation.
-func (v *Value) UnmarshalJSON(b []byte) error {
-	if len(b) == 0 {
-		return fmt.Errorf("error unmarshaling empty bytes")
-	}
-	var val interface{}
-	var err error
-	switch b[0] {
-	case '-':
-		var ival int64
-		err = json.Unmarshal(b, &ival)
-		val = ival
-	case '"':
-		var bval []byte
-		err = json.Unmarshal(b, &bval)
-		val = bval
-	case 'n': // null
-		err = json.Unmarshal(b, &val)
-	default:
-		var uval uint64
-		err = json.Unmarshal(b, &uval)
-		val = uval
-	}
-	if err != nil {
-		return err
-	}
-	*v, err = BuildValue(val)
-	return err
 }
 
 func encodeBytesSQL(val []byte, b BinWriter) {

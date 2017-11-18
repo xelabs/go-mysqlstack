@@ -123,6 +123,19 @@ func TestDDL1(t *testing.T) {
 				"	`name` varchar(10)\n" +
 				") engine=tokudb default charset=utf8",
 		},
+		// Index.
+		{
+			input: "create table test.t (\n" +
+				"	`id` int primary key,\n" +
+				"	`name` varchar(10),\n" +
+				"	KEY `IDX_USER` (`user_id`)\n" +
+				") engine=tokudb default charset=utf8 partition by hash(id)",
+			output: "create table test.t (\n" +
+				"	`id` int primary key,\n" +
+				"	`name` varchar(10),\n" +
+				"	key `IDX_USER` (`user_id`)\n" +
+				") engine=tokudb default charset=utf8",
+		},
 
 		{
 			input:  "create table if not exists t1 (a int)",
@@ -229,6 +242,18 @@ func TestDDL1(t *testing.T) {
 			t.Errorf("input: %s, err: %v", sql, err)
 			continue
 		}
+
+		// Walk.
+		Walk(func(node SQLNode) (bool, error) {
+			return true, nil
+		}, tree)
+
+		// Walk.
+		node := tree.(*DDL)
+		Walk(func(node SQLNode) (bool, error) {
+			return true, nil
+		}, node.TableSpec)
+
 		got := String(tree.(*DDL))
 		if ddl.output != got {
 			t.Errorf("want:\n%s\ngot:\n%s", ddl.output, got)

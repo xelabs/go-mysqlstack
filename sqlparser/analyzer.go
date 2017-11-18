@@ -21,7 +21,6 @@ package sqlparser
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -220,47 +219,4 @@ func StringIn(str string, values ...string) bool {
 		}
 	}
 	return false
-}
-
-// ExtractSetValues returns a map of key-value pairs
-// if the query is a SET statement. Values can be int64 or string.
-// Since set variable names are case insensitive, all keys are returned
-// as lower case.
-func ExtractSetValues(sql string) (map[string]interface{}, error) {
-	stmt, err := Parse(sql)
-	if err != nil {
-		return nil, err
-	}
-	setStmt, ok := stmt.(*Set)
-	if !ok {
-		return nil, fmt.Errorf("ast did not yield *sqlparser.Set: %T", stmt)
-	}
-	result := make(map[string]interface{})
-	for _, expr := range setStmt.Exprs {
-		if !expr.Name.Qualifier.IsEmpty() {
-			return nil, fmt.Errorf("invalid syntax: %v", String(expr.Name))
-		}
-		key := expr.Name.Name.Lowered()
-
-		switch expr := expr.Expr.(type) {
-		case *SQLVal:
-			switch expr.Type {
-			case StrVal:
-				result[key] = string(expr.Val)
-			case IntVal:
-				num, err := strconv.ParseInt(string(expr.Val), 0, 64)
-				if err != nil {
-					return nil, err
-				}
-				result[key] = num
-			default:
-				return nil, fmt.Errorf("invalid value type: %v", String(expr))
-			}
-		case *NullVal:
-			result[key] = nil
-		default:
-			return nil, fmt.Errorf("invalid syntax: %s", String(expr))
-		}
-	}
-	return result, nil
 }

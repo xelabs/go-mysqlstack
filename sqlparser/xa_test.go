@@ -16,17 +16,39 @@ limitations under the License.
 
 package sqlparser
 
-import "strings"
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestExplain(t *testing.T) {
+func TestXA(t *testing.T) {
 	validSQL := []struct {
 		input  string
 		output string
 	}{
 		{
-			input:  "explain select * from 1",
-			output: "explain",
+			input:  "xa begin 'x1'",
+			output: "XA",
+		},
+
+		{
+			input:  "xa prepare 'x1'",
+			output: "XA",
+		},
+
+		{
+			input:  "xa end 'x1'",
+			output: "XA",
+		},
+
+		{
+			input:  "xa commit 'x1'",
+			output: "XA",
+		},
+
+		{
+			input:  "xa rollback 'x1'",
+			output: "XA",
 		},
 	}
 
@@ -43,7 +65,10 @@ func TestExplain(t *testing.T) {
 			return true, nil
 		}, tree)
 
-		got := String(tree.(*Explain))
+		node := tree.(*Xa)
+
+		// Format.
+		got := String(node)
 		if exp.output != got {
 			t.Errorf("want:\n%s\ngot:\n%s", exp.output, got)
 		}

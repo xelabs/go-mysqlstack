@@ -16,8 +16,11 @@ limitations under the License.
 
 package sqlparser
 
-import "strings"
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
 
 func TestKill(t *testing.T) {
 	validSQL := []struct {
@@ -42,7 +45,17 @@ func TestKill(t *testing.T) {
 			t.Errorf("input: %s, err: %v", sql, err)
 			continue
 		}
-		got := String(tree.(*Kill))
+
+		// Walk.
+		Walk(func(node SQLNode) (bool, error) {
+			return true, nil
+		}, tree)
+
+		node := tree.(*Kill)
+		fmt.Sprintf("id:%v", node.QueryID.AsUint64())
+
+		// Format.
+		got := String(node)
 		if exp.output != got {
 			t.Errorf("want:\n%s\ngot:\n%s", exp.output, got)
 		}

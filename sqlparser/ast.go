@@ -23,7 +23,6 @@ import (
 	"errors"
 	"strings"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
@@ -764,110 +763,6 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	}
 }
 
-// DescribeType returns the abbreviated type information as required for
-// describe table
-func (ct *ColumnType) DescribeType() string {
-	buf := NewTrackedBuffer(nil)
-	buf.Myprintf("%s", ct.Type)
-	if ct.Length != nil && ct.Scale != nil {
-		buf.Myprintf("(%v,%v)", ct.Length, ct.Scale)
-	} else if ct.Length != nil {
-		buf.Myprintf("(%v)", ct.Length)
-	}
-
-	opts := make([]string, 0, 16)
-	if ct.Unsigned {
-		opts = append(opts, keywordStrings[UNSIGNED])
-	}
-	if ct.Zerofill {
-		opts = append(opts, keywordStrings[ZEROFILL])
-	}
-	if len(opts) != 0 {
-		buf.Myprintf(" %s", strings.Join(opts, " "))
-	}
-	return buf.String()
-}
-
-// SQLType returns the sqltypes type code for the given column
-func (ct *ColumnType) SQLType() querypb.Type {
-	switch ct.Type {
-	case keywordStrings[TINYINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint8
-		}
-		return sqltypes.Int8
-	case keywordStrings[SMALLINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint16
-		}
-		return sqltypes.Int16
-	case keywordStrings[MEDIUMINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint24
-		}
-		return sqltypes.Int24
-	case keywordStrings[INT]:
-		fallthrough
-	case keywordStrings[INTEGER]:
-		if ct.Unsigned {
-			return sqltypes.Uint32
-		}
-		return sqltypes.Int32
-	case keywordStrings[BIGINT]:
-		if ct.Unsigned {
-			return sqltypes.Uint64
-		}
-		return sqltypes.Int64
-	case keywordStrings[TEXT]:
-		return sqltypes.Text
-	case keywordStrings[TINYTEXT]:
-		return sqltypes.Text
-	case keywordStrings[MEDIUMTEXT]:
-		return sqltypes.Text
-	case keywordStrings[LONGTEXT]:
-		return sqltypes.Text
-	case keywordStrings[BLOB]:
-		return sqltypes.Blob
-	case keywordStrings[TINYBLOB]:
-		return sqltypes.Blob
-	case keywordStrings[MEDIUMBLOB]:
-		return sqltypes.Blob
-	case keywordStrings[LONGBLOB]:
-		return sqltypes.Blob
-	case keywordStrings[CHAR]:
-		return sqltypes.Char
-	case keywordStrings[VARCHAR]:
-		return sqltypes.VarChar
-	case keywordStrings[BINARY]:
-		return sqltypes.Binary
-	case keywordStrings[VARBINARY]:
-		return sqltypes.VarBinary
-	case keywordStrings[DATE]:
-		return sqltypes.Date
-	case keywordStrings[TIME]:
-		return sqltypes.Time
-	case keywordStrings[DATETIME]:
-		return sqltypes.Datetime
-	case keywordStrings[TIMESTAMP]:
-		return sqltypes.Timestamp
-	case keywordStrings[YEAR]:
-		return sqltypes.Year
-	case keywordStrings[FLOAT]:
-		return sqltypes.Float32
-	case keywordStrings[DOUBLE]:
-		return sqltypes.Float64
-	case keywordStrings[DECIMAL]:
-		return sqltypes.Decimal
-	case keywordStrings[BIT]:
-		return sqltypes.Bit
-	case keywordStrings[ENUM]:
-		return sqltypes.Enum
-	case keywordStrings[JSON]:
-		return sqltypes.TypeJSON
-	}
-	panic("unimplemented type " + ct.Type)
-}
-
 // WalkSubtree walks the nodes of the subtree.
 func (ct *ColumnType) WalkSubtree(visit Visit) error {
 	return nil
@@ -1271,28 +1166,6 @@ type SimpleTableExpr interface {
 func (TableName) iSimpleTableExpr() {}
 func (*Subquery) iSimpleTableExpr() {}
 
-// TableNames is a list of TableName.
-type TableNames []TableName
-
-// Format formats the node.
-func (node TableNames) Format(buf *TrackedBuffer) {
-	var prefix string
-	for _, n := range node {
-		buf.Myprintf("%s%v", prefix, n)
-		prefix = ", "
-	}
-}
-
-// WalkSubtree walks the nodes of the subtree.
-func (node TableNames) WalkSubtree(visit Visit) error {
-	for _, n := range node {
-		if err := Walk(visit, n); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // TableName represents a table  name.
 // Qualifier, if specified, represents a database or keyspace.
 // TableName is a value struct whose fields are case sensitive.
@@ -1326,16 +1199,6 @@ func (node TableName) WalkSubtree(visit Visit) error {
 func (node TableName) IsEmpty() bool {
 	// If Name is empty, Qualifer is also empty.
 	return node.Name.IsEmpty()
-}
-
-// ToViewName returns a TableName acceptable for use as a VIEW. VIEW names are
-// always lowercase, so ToViewName lowercasese the name. Databases are case-sensitive
-// so Qualifier is left untouched.
-func (node TableName) ToViewName() TableName {
-	return TableName{
-		Qualifier: node.Qualifier,
-		Name:      NewTableIdent(strings.ToLower(node.Name.v)),
-	}
 }
 
 // ParenTableExpr represents a parenthesized list of TableExpr.

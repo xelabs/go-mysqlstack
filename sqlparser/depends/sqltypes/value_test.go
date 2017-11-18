@@ -86,6 +86,24 @@ func TestBuildValue(t *testing.T) {
 	}, {
 		in:  testVal(VarBinary, "a"),
 		out: testVal(VarBinary, "a"),
+	}, {
+		in:  NewInt64(63),
+		out: testVal(Int64, "63"),
+	}, {
+		in:  NewUint64(63),
+		out: testVal(Uint64, "63"),
+	}, {
+		in:  NewFloat64(63.4),
+		out: testVal(Float64, "63.4"),
+	}, {
+		in:  NewInt32(63),
+		out: testVal(Int32, "63"),
+	}, {
+		in:  NewVarChar("63"),
+		out: testVal(VarChar, "63"),
+	}, {
+		in:  NewVarBinary("63"),
+		out: testVal(VarBinary, "63"),
 	}}
 	for _, tcase := range testcases {
 		v, err := BuildValue(tcase.in)
@@ -102,6 +120,12 @@ func TestBuildValue(t *testing.T) {
 	want := "unexpected"
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Errorf("BuildValue(chan): %v, want %v", err, want)
+	}
+
+	// Test NewIntegral.
+	_, err = NewIntegral("12")
+	if err != nil {
+		t.Errorf("NewIntegral error: %v", err)
 	}
 }
 

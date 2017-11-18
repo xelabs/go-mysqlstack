@@ -278,7 +278,6 @@ func (th *TestHandler) ComQuery(s *Session, query string, callback func(qr *sqlt
 		callback(v.conds[idx].Result)
 		return nil
 	}
-
 	return fmt.Errorf("mock.handler.query[%v].error[can.not.found.the.cond.please.set.first]", query)
 }
 

@@ -16,36 +16,9 @@ limitations under the License.
 
 package sqlparser
 
-import "strings"
 import "testing"
 
-func TestExplain(t *testing.T) {
-	validSQL := []struct {
-		input  string
-		output string
-	}{
-		{
-			input:  "explain select * from 1",
-			output: "explain",
-		},
-	}
-
-	for _, exp := range validSQL {
-		sql := strings.TrimSpace(exp.input)
-		tree, err := Parse(sql)
-		if err != nil {
-			t.Errorf("input: %s, err: %v", sql, err)
-			continue
-		}
-
-		// Walk.
-		Walk(func(node SQLNode) (bool, error) {
-			return true, nil
-		}, tree)
-
-		got := String(tree.(*Explain))
-		if exp.output != got {
-			t.Errorf("want:\n%s\ngot:\n%s", exp.output, got)
-		}
-	}
+func TestTrackedBuffer(t *testing.T) {
+	buf := NewTrackedBuffer(nil)
+	buf.Myprintf("%c,%s,%a", 'a', "a", "a")
 }

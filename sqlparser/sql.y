@@ -65,7 +65,6 @@ func forceEOF(yylex interface{}) {
   tableExprs    TableExprs
   tableExpr     TableExpr
   tableName     TableName
-  tableNames    TableNames
   indexHints    *IndexHints
   expr          Expr
   exprs         Exprs

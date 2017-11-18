@@ -526,6 +526,8 @@ func TestValid(t *testing.T) {
 	}, {
 		input: "insert /* simple */ into a values (1)",
 	}, {
+		input: "insert into a values (rand())",
+	}, {
 		input: "insert /* a.b */ into a.b values (1)",
 	}, {
 		input: "insert /* multi-value */ into a values (1, 2)",
@@ -996,6 +998,12 @@ func TestConvert(t *testing.T) {
 			t.Errorf("input: %s, err: %v", tcase.input, err)
 			continue
 		}
+
+		// Walk.
+		Walk(func(node SQLNode) (bool, error) {
+			return true, nil
+		}, tree)
+
 		out := String(tree)
 		if out != tcase.output {
 			t.Errorf("out: %s, want %s", out, tcase.output)

@@ -79,7 +79,7 @@ func TestRows(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, result1.Fields, rows.Fields())
 		for rows.Next() {
-			//_ = rows.Datas()
+			_ = rows.Datas()
 			_, _ = rows.RowValues()
 		}
 
