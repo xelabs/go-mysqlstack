@@ -88,10 +88,8 @@ func (tracker *matchtracker) match(required byte) bool {
 		return false
 	}
 	tracker.index--
-	if tracker.query[tracker.index] != required {
-		return false
-	}
-	return true
+	ret := (tracker.query[tracker.index] == required)
+	return ret
 }
 
 // skipBlanks advances till a non-blank character

@@ -233,7 +233,6 @@ func (node *Select) AddWhere(expr Expr) {
 		Left:  node.Where.Expr,
 		Right: expr,
 	}
-	return
 }
 
 // AddHaving adds the boolean expression to the
@@ -256,7 +255,6 @@ func (node *Select) AddHaving(expr Expr) {
 		Left:  node.Having.Expr,
 		Right: expr,
 	}
-	return
 }
 
 // ParenSelect is a parenthesized SELECT statement.
@@ -931,11 +929,7 @@ func (ii *IndexInfo) Format(buf *TrackedBuffer) {
 
 // WalkSubtree walks the nodes of the subtree.
 func (ii *IndexInfo) WalkSubtree(visit Visit) error {
-	if err := Walk(visit, ii.Name); err != nil {
-		return err
-	}
-
-	return nil
+	return Walk(visit, ii.Name)
 }
 
 // IndexColumn describes a column in an index definition with optional length
@@ -2349,10 +2343,7 @@ func (node *CaseExpr) WalkSubtree(visit Visit) error {
 			return err
 		}
 	}
-	if err := Walk(visit, node.Else); err != nil {
-		return err
-	}
-	return nil
+	return Walk(visit, node.Else)
 }
 
 // Default represents a DEFAULT expression.

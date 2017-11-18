@@ -269,7 +269,7 @@ const (
 	// Error codes for server-side errors.
 	// Originally found in include/mysql/mysqld_error.h
 	ER_ERROR_FIRST                  uint16 = 1000
-	ER_CON_COUNT_ERROR                     = 1040
+	ER_CON_COUNT_ERROR              uint16 = 1040
 	ER_ACCESS_DENIED_ERROR                 = 1045
 	ER_NO_DB_ERROR                         = 1046
 	ER_BAD_DB_ERROR                        = 1049
