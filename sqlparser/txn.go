@@ -7,10 +7,14 @@ package sqlparser
 import ()
 
 const (
-	StartTxnStr  = "start transaction"
+	// StartTxnStr represents the txn start.
+	StartTxnStr = "start transaction"
+
+	// CommitTxnStr represents the txn commit.
 	CommitTxnStr = "commit"
 )
 
+// Transaction represents the transaction tuple.
 type Transaction struct {
 	Action string
 }

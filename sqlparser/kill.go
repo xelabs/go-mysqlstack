@@ -8,10 +8,12 @@ import (
 	"strconv"
 )
 
+// NumVal represents numval tuple.
 type NumVal struct {
 	raw string
 }
 
+// AsUint64 returns uint64 value.
 func (exp *NumVal) AsUint64() uint64 {
 	v, err := strconv.ParseUint(exp.raw, 10, 64)
 	if err != nil {

@@ -15,9 +15,11 @@ import (
 )
 
 var (
+	// ErrIOEOF used for io.EOF.
 	ErrIOEOF = io.EOF
 )
 
+// Buffer represents the buffer tuple.
 type Buffer struct {
 	pos  int
 	seek int
@@ -25,6 +27,7 @@ type Buffer struct {
 	buf  []byte
 }
 
+// NewBuffer creates a new buffer.
 func NewBuffer(cap int) *Buffer {
 	return &Buffer{pos: 0,
 		cap: cap,
@@ -32,6 +35,7 @@ func NewBuffer(cap int) *Buffer {
 	}
 }
 
+// ReadBuffer used to read buffer from datas.
 func ReadBuffer(b []byte) *Buffer {
 	return &Buffer{
 		buf: b,
@@ -39,20 +43,24 @@ func ReadBuffer(b []byte) *Buffer {
 	}
 }
 
+// Reset used to reset a buffer.
 func (b *Buffer) Reset(data []byte) {
 	b.buf = data
 	b.pos = len(data)
 	b.seek = 0
 }
 
+// Datas returns the datas of the buffer.
 func (b *Buffer) Datas() []byte {
 	return b.buf[:b.pos]
 }
 
+// Length returns the last position of the buffer.
 func (b *Buffer) Length() int {
 	return b.pos
 }
 
+// Seek returns the seek position of the buffer.
 func (b *Buffer) Seek() int {
 	return b.seek
 }
@@ -67,12 +75,14 @@ func (b *Buffer) extend(n int) {
 	}
 }
 
+// WriteU8 used to write uint8.
 func (b *Buffer) WriteU8(v uint8) {
 	b.extend(1)
 	b.buf[b.pos] = v
 	b.pos++
 }
 
+// ReadU8 used read uint8.
 func (b *Buffer) ReadU8() (v uint8, err error) {
 	if (b.seek + 1) > b.pos {
 		err = ErrIOEOF
@@ -84,6 +94,7 @@ func (b *Buffer) ReadU8() (v uint8, err error) {
 	return
 }
 
+// WriteU16 used to write uint16.
 func (b *Buffer) WriteU16(v uint16) {
 	b.extend(2)
 	b.buf[b.pos] = byte(v)
@@ -91,6 +102,7 @@ func (b *Buffer) WriteU16(v uint16) {
 	b.pos += 2
 }
 
+// ReadU16 used to read uint16.
 func (b *Buffer) ReadU16() (v uint16, err error) {
 	if (b.seek + 2) > b.pos {
 		err = ErrIOEOF
@@ -103,6 +115,7 @@ func (b *Buffer) ReadU16() (v uint16, err error) {
 	return
 }
 
+// WriteU24 used to write uint24.
 func (b *Buffer) WriteU24(v uint32) {
 	b.extend(3)
 	b.buf[b.pos] = byte(v)
@@ -111,6 +124,7 @@ func (b *Buffer) WriteU24(v uint32) {
 	b.pos += 3
 }
 
+// ReadU24 used to read uint24.
 func (b *Buffer) ReadU24() (v uint32, err error) {
 	if (b.seek + 3) > b.pos {
 		err = ErrIOEOF
@@ -124,6 +138,7 @@ func (b *Buffer) ReadU24() (v uint32, err error) {
 	return
 }
 
+// WriteU32 used to write uint32.
 func (b *Buffer) WriteU32(v uint32) {
 	b.extend(4)
 	b.buf[b.pos] = byte(v)
@@ -133,6 +148,7 @@ func (b *Buffer) WriteU32(v uint32) {
 	b.pos += 4
 }
 
+// ReadU32 used to read uint32.
 func (b *Buffer) ReadU32() (v uint32, err error) {
 	if (b.seek + 4) > b.pos {
 		err = ErrIOEOF
@@ -147,6 +163,7 @@ func (b *Buffer) ReadU32() (v uint32, err error) {
 	return
 }
 
+// WriteU64 used to write uint64.
 func (b *Buffer) WriteU64(v uint64) {
 	b.extend(8)
 	b.buf[b.pos] = byte(v)
@@ -160,6 +177,7 @@ func (b *Buffer) WriteU64(v uint64) {
 	b.pos += 8
 }
 
+// ReadU64 used to read uint64.
 func (b *Buffer) ReadU64() (v uint64, err error) {
 	if (b.seek + 8) > b.pos {
 		err = ErrIOEOF
@@ -178,6 +196,7 @@ func (b *Buffer) ReadU64() (v uint64, err error) {
 	return
 }
 
+// WriteLenEncode used to write variable length.
 // https://dev.mysql.com/doc/internals/en/integer.html#length-encoded-integer
 func (b *Buffer) WriteLenEncode(v uint64) {
 	switch {
@@ -198,11 +217,13 @@ func (b *Buffer) WriteLenEncode(v uint64) {
 	}
 }
 
+// WriteLenEncodeNUL used to write NUL>
 // 0xfb is represents a NULL in a ProtocolText::ResultsetRow
 func (b *Buffer) WriteLenEncodeNUL() {
 	b.WriteU8(0xfb)
 }
 
+// ReadLenEncode used to read variable length.
 func (b *Buffer) ReadLenEncode() (v uint64, err error) {
 	var u8 uint8
 	var u16 uint16
@@ -244,12 +265,14 @@ func (b *Buffer) ReadLenEncode() (v uint64, err error) {
 	}
 }
 
+// WriteLenEncodeString used to write variable string.
 func (b *Buffer) WriteLenEncodeString(s string) {
 	l := len(s)
 	b.WriteLenEncode(uint64(l))
 	b.WriteString(s)
 }
 
+// ReadLenEncodeString used to read variable string.
 func (b *Buffer) ReadLenEncodeString() (s string, err error) {
 	var l uint64
 
@@ -263,12 +286,14 @@ func (b *Buffer) ReadLenEncodeString() (s string, err error) {
 	return
 }
 
+// WriteLenEncodeBytes used to write variable bytes.
 func (b *Buffer) WriteLenEncodeBytes(v []byte) {
 	l := len(v)
 	b.WriteLenEncode(uint64(l))
 	b.WriteBytes(v)
 }
 
+// ReadLenEncodeBytes used to read variable bytes.
 func (b *Buffer) ReadLenEncodeBytes() (v []byte, err error) {
 	var l uint64
 
@@ -283,14 +308,14 @@ func (b *Buffer) ReadLenEncodeBytes() (v []byte, err error) {
 
 	if l == 0 {
 		return []byte{}, nil
-	} else {
-		if v, err = b.ReadBytes(int(l)); err != nil {
-			return
-		}
+	}
+	if v, err = b.ReadBytes(int(l)); err != nil {
+		return
 	}
 	return
 }
 
+// WriteEOF used to write EOF.
 func (b *Buffer) WriteEOF(n int) {
 	b.extend(n)
 	for i := 0; i < n; i++ {
@@ -299,10 +324,12 @@ func (b *Buffer) WriteEOF(n int) {
 	}
 }
 
+// ReadEOF used to read EOF.
 func (b *Buffer) ReadEOF(n int) (err error) {
 	return b.ReadZero(n)
 }
 
+// WriteZero used to write zero.
 func (b *Buffer) WriteZero(n int) {
 	b.extend(n)
 	for i := 0; i < n; i++ {
@@ -311,6 +338,7 @@ func (b *Buffer) WriteZero(n int) {
 	}
 }
 
+// ReadZero used to read zero.
 func (b *Buffer) ReadZero(n int) (err error) {
 	if (b.seek + n) > b.pos {
 		err = ErrIOEOF
@@ -320,6 +348,7 @@ func (b *Buffer) ReadZero(n int) (err error) {
 	return
 }
 
+// WriteString used to write string.
 func (b *Buffer) WriteString(s string) {
 	n := len(s)
 	b.extend(n)
@@ -327,6 +356,7 @@ func (b *Buffer) WriteString(s string) {
 	b.pos += n
 }
 
+// ReadString used to read string.
 func (b *Buffer) ReadString(n int) (s string, err error) {
 	if (b.seek + n) > b.pos {
 		err = ErrIOEOF
@@ -387,6 +417,7 @@ func (b *Buffer) readBytesWithToken(token uint8) (v []byte, err error) {
 	return
 }
 
+// WriteBytes used to write bytes.
 func (b *Buffer) WriteBytes(bs []byte) {
 	n := len(bs)
 	b.extend(n)
@@ -394,6 +425,7 @@ func (b *Buffer) WriteBytes(bs []byte) {
 	b.pos += n
 }
 
+// ReadBytes used to read bytes.
 func (b *Buffer) ReadBytes(n int) (v []byte, err error) {
 	if n == 0 {
 		return nil, nil

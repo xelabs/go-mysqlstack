@@ -11,7 +11,7 @@ import (
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
 
-// Column operations.
+// RemoveColumns used to remove columns who in the idxs.
 func (result *Result) RemoveColumns(idxs ...int) {
 	c := len(idxs)
 	if c == 0 {

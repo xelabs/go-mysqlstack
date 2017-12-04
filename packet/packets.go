@@ -21,26 +21,30 @@ import (
 )
 
 const (
+	// PACKET_MAX_SIZE used for the max packet size.
 	PACKET_MAX_SIZE = (1<<24 - 1) // (16MB - 1）
 )
 
+// Packet presents the packet tuple.
 type Packet struct {
 	SequenceID byte
 	Datas      []byte
 }
 
+// Packets presents the stream tuple.
 type Packets struct {
 	seq    uint8
 	stream *Stream
 }
 
+// NewPackets creates the new packets.
 func NewPackets(c net.Conn) *Packets {
 	return &Packets{
 		stream: NewStream(c, PACKET_MAX_SIZE),
 	}
 }
 
-// Read reads packet from the stream buffer.
+// Next used to read the next packet.
 func (p *Packets) Next() ([]byte, error) {
 	pkt, err := p.stream.Read()
 	if err != nil {
@@ -196,7 +200,7 @@ func (p *Packets) AppendOKWithEOFHeader(affectedRows, lastInsertID uint64, flags
 	return p.Append(buf.Datas())
 }
 
-// WriteColumns writes columns packet to the stream buffer.
+// AppendColumns used to append column to columns.
 func (p *Packets) AppendColumns(columns []*querypb.Field) error {
 	// column count
 	count := len(columns)

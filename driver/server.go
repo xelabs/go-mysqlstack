@@ -21,6 +21,7 @@ import (
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
+// Handler interface.
 type Handler interface {
 	// NewSession is called when a session is coming.
 	NewSession(session *Session)
@@ -41,6 +42,7 @@ type Handler interface {
 	ComQuery(session *Session, query string, callback func(*sqltypes.Result) error) error
 }
 
+// Listener is a connection handler.
 type Listener struct {
 	// Logger.
 	log *xlog.Log
@@ -151,21 +153,21 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 		log.Warning("server.user[%+v].auth.check.failed", session.User())
 		session.writeErrFromError(err)
 		return
-	} else {
-		// Check the database.
-		db := session.auth.Database()
-		if db != "" {
-			if err = l.handler.ComInitDB(session, db); err != nil {
-				log.Error("server.cominitdb[%s].error:%+v", db, err)
-				session.writeErrFromError(err)
-				return
-			}
-			session.SetSchema(db)
-		}
+	}
 
-		if err = session.packets.WriteOK(0, 0, session.greeting.Status(), 0); err != nil {
+	// Check the database.
+	db := session.auth.Database()
+	if db != "" {
+		if err = l.handler.ComInitDB(session, db); err != nil {
+			log.Error("server.cominitdb[%s].error:%+v", db, err)
+			session.writeErrFromError(err)
 			return
 		}
+		session.SetSchema(db)
+	}
+
+	if err = session.packets.WriteOK(0, 0, session.greeting.Status(), 0); err != nil {
+		return
 	}
 
 	for {
@@ -218,6 +220,7 @@ func (l *Listener) handle(conn net.Conn, ID uint32) {
 	}
 }
 
+// Addr returns the client address.
 func (l *Listener) Addr() string {
 	return l.address
 }

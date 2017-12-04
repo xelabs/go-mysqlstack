@@ -8,13 +8,18 @@ import (
 	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
 )
 
+// ResultState enum.
 type ResultState int
 
 const (
-	RState_None ResultState = iota
-	RState_Fields
-	RState_Rows
-	RState_Finished
+	// RStateNone enum.
+	RStateNone ResultState = iota
+	// RStateFields enum.
+	RStateFields
+	// RStateRows enum.
+	RStateRows
+	// RStateFinished enum.
+	RStateFinished
 )
 
 // Result represents a query result.

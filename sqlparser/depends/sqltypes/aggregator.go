@@ -11,6 +11,7 @@ import (
 	"bytes"
 )
 
+// Operator used to do the aggregator for sum/min/max/ etc.
 func Operator(v1 Value, v2 Value, fn func(x interface{}, y interface{}) interface{}) Value {
 	// Sum field type is Decimal, we convert it to golang Float64.
 	switch v1.Type() {
@@ -32,6 +33,7 @@ func Operator(v1 Value, v2 Value, fn func(x interface{}, y interface{}) interfac
 	return v
 }
 
+// SumFn used to do sum of two values.
 func SumFn(x interface{}, y interface{}) interface{} {
 	var v interface{}
 	switch x.(type) {
@@ -47,6 +49,7 @@ func SumFn(x interface{}, y interface{}) interface{} {
 	return v
 }
 
+// MinFn returns the min value of two.
 func MinFn(x interface{}, y interface{}) interface{} {
 	v := x
 	switch x.(type) {
@@ -70,6 +73,7 @@ func MinFn(x interface{}, y interface{}) interface{} {
 	return v
 }
 
+// MaxFn returns the max value of two.
 func MaxFn(x interface{}, y interface{}) interface{} {
 	v := x
 	switch x.(type) {
@@ -93,6 +97,7 @@ func MaxFn(x interface{}, y interface{}) interface{} {
 	return v
 }
 
+// DivFn returns the div value of two.
 func DivFn(x interface{}, y interface{}) interface{} {
 	var v1, v2 float64
 

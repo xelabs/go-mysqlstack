@@ -15,9 +15,11 @@ import (
 )
 
 const (
+	// ERR_PACKET is the error packet byte.
 	ERR_PACKET byte = 0xff
 )
 
+// ERR is the error packet.
 type ERR struct {
 	Header       byte // always 0xff
 	ErrorCode    uint16
@@ -55,6 +57,7 @@ func UnPackERR(data []byte) error {
 	return sqldb.NewSQLError1(e.ErrorCode, e.SQLState, "%s", e.ErrorMessage)
 }
 
+// PackERR used to pack the error packet.
 func PackERR(e *ERR) []byte {
 	buf := common.NewBuffer(64)
 

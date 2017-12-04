@@ -17,7 +17,6 @@ limitations under the License.
 package sqlparser
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -52,7 +51,7 @@ func TestKill(t *testing.T) {
 		}, tree)
 
 		node := tree.(*Kill)
-		fmt.Sprintf("id:%v", node.QueryID.AsUint64())
+		node.QueryID.AsUint64()
 
 		// Format.
 		got := String(node)

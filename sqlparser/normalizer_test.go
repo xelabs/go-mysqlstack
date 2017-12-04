@@ -181,6 +181,6 @@ func TestGetBindVars(t *testing.T) {
 		"v5": {},
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("GetBindVars: %v, wnat %v", got, want)
+		t.Errorf("GetBindVars: %v, want %v", got, want)
 	}
 }

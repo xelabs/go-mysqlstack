@@ -49,6 +49,7 @@ const (
 	COM_RESET_CONNECTION
 )
 
+// CommandString used for translate cmd to string.
 func CommandString(cmd byte) string {
 	switch cmd {
 	case COM_SLEEP:
@@ -200,6 +201,7 @@ const (
 )
 
 const (
+	// SSUnknownSQLState is the default SQLState.
 	SSUnknownSQLState = "HY000"
 )
 
@@ -207,6 +209,7 @@ const (
 // Originally found in include/mysql/mysql_com.h
 // See http://dev.mysql.com/doc/internals/en/status-flags.html
 const (
+	// SERVER_STATUS_AUTOCOMMIT is the default status of auto-commit.
 	SERVER_STATUS_AUTOCOMMIT = 0x0002
 )
 
@@ -268,18 +271,42 @@ var CharacterSetMap = map[string]uint8{
 const (
 	// Error codes for server-side errors.
 	// Originally found in include/mysql/mysqld_error.h
-	ER_ERROR_FIRST                  uint16 = 1000
-	ER_CON_COUNT_ERROR              uint16 = 1040
-	ER_ACCESS_DENIED_ERROR                 = 1045
-	ER_NO_DB_ERROR                         = 1046
-	ER_BAD_DB_ERROR                        = 1049
-	ER_UNKNOWN_ERROR                       = 1105
-	ER_HOST_NOT_PRIVILEGED                 = 1130
-	ER_NO_SUCH_TABLE                       = 1146
-	ER_SYNTAX_ERROR                        = 1149
-	ER_SPECIFIC_ACCESS_DENIED_ERROR        = 1227
-	ER_OPTION_PREVENTS_STATEMENT           = 1290
-	ER_MALFORMED_PACKET                    = 1835
+
+	// ER_ERROR_FIRST enum.
+	ER_ERROR_FIRST uint16 = 1000
+
+	// ER_CON_COUNT_ERROR enum.
+	ER_CON_COUNT_ERROR uint16 = 1040
+
+	// ER_ACCESS_DENIED_ERROR enum.
+	ER_ACCESS_DENIED_ERROR = 1045
+
+	// ER_NO_DB_ERROR enum.
+	ER_NO_DB_ERROR = 1046
+
+	// ER_BAD_DB_ERROR enum.
+	ER_BAD_DB_ERROR = 1049
+
+	// ER_UNKNOWN_ERROR enum.
+	ER_UNKNOWN_ERROR = 1105
+
+	// ER_HOST_NOT_PRIVILEGED enum.
+	ER_HOST_NOT_PRIVILEGED = 1130
+
+	// ER_NO_SUCH_TABLE enum.
+	ER_NO_SUCH_TABLE = 1146
+
+	// ER_SYNTAX_ERROR enum.
+	ER_SYNTAX_ERROR = 1149
+
+	// ER_SPECIFIC_ACCESS_DENIED_ERROR enum.
+	ER_SPECIFIC_ACCESS_DENIED_ERROR = 1227
+
+	// ER_OPTION_PREVENTS_STATEMENT enum.
+	ER_OPTION_PREVENTS_STATEMENT = 1290
+
+	// ER_MALFORMED_PACKET enum.
+	ER_MALFORMED_PACKET = 1835
 
 	// Error codes for client-side errors.
 	// Originally found in include/mysql/errmsg.h
@@ -287,11 +314,16 @@ const (
 	// - the client cannot write an initial auth packet.
 	// - the client cannot read an initial auth packet.
 	// - the client cannot read a response from the server.
+
+	// CR_SERVER_LOST enum.
 	CR_SERVER_LOST = 2013
+
+	// CR_VERSION_ERROR enum.
 	// This is returned if the server versions don't match what we support.
 	CR_VERSION_ERROR = 2007
 )
 
+// SQLErrors is the list of sql errors.
 var SQLErrors = map[uint16]*SQLError{
 	ER_CON_COUNT_ERROR:              &SQLError{Num: ER_CON_COUNT_ERROR, State: "08004", Message: "Too many connections"},
 	ER_ACCESS_DENIED_ERROR:          &SQLError{Num: ER_ACCESS_DENIED_ERROR, State: "28000", Message: "Access denied for user '%-.48s'@'%-.64s' (using password: %s)"},
@@ -302,7 +334,6 @@ var SQLErrors = map[uint16]*SQLError{
 	ER_NO_SUCH_TABLE:                &SQLError{Num: ER_NO_SUCH_TABLE, State: "42S02", Message: "Table '%s' doesn't exist"},
 	ER_SYNTAX_ERROR:                 &SQLError{Num: ER_SYNTAX_ERROR, State: "42000", Message: "You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use, %s"},
 	ER_SPECIFIC_ACCESS_DENIED_ERROR: &SQLError{Num: ER_SPECIFIC_ACCESS_DENIED_ERROR, State: "42000", Message: "Access denied; you need (at least one of) the %-.128s privilege(s) for this operation"},
-	ER_OPTION_PREVENTS_STATEMENT:    &SQLError{Num: ER_OPTION_PREVENTS_STATEMENT, State: "42000", Message: "The MySQL server is running with the %s option so it cannot execute this statement"},
-	ER_MALFORMED_PACKET:             &SQLError{Num: ER_MALFORMED_PACKET, State: "HY000", Message: "Malformed communication packet."},
-	CR_SERVER_LOST:                  &SQLError{Num: CR_SERVER_LOST, State: "HY000", Message: ""},
+	ER_OPTION_PREVENTS_STATEMENT:    &SQLError{Num: ER_OPTION_PREVENTS_STATEMENT, State: "42000", Message: "The MySQL server is running with the %s option so it cannot execute this statement"}, ER_MALFORMED_PACKET: &SQLError{Num: ER_MALFORMED_PACKET, State: "HY000", Message: "Malformed communication packet."},
+	CR_SERVER_LOST: &SQLError{Num: CR_SERVER_LOST, State: "HY000", Message: ""},
 }

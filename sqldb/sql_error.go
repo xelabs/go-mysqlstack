@@ -24,6 +24,7 @@ type SQLError struct {
 	Query   string
 }
 
+// NewSQLError creates new sql error.
 func NewSQLError(number uint16, format string, args ...interface{}) *SQLError {
 	sqlErr := &SQLError{}
 	err, ok := SQLErrors[number]
@@ -44,6 +45,7 @@ func NewSQLError(number uint16, format string, args ...interface{}) *SQLError {
 	return sqlErr
 }
 
+// NewSQLError1 creates new sql error with state.
 func NewSQLError1(number uint16, state string, format string, args ...interface{}) *SQLError {
 	return &SQLError{
 		Num:     number,

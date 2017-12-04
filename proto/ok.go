@@ -15,9 +15,11 @@ import (
 )
 
 const (
+	// OK_PACKET is the OK byte.
 	OK_PACKET byte = 0x00
 )
 
+// OK used for OK packet.
 type OK struct {
 	Header       byte // 0x00
 	AffectedRows uint64
@@ -26,6 +28,7 @@ type OK struct {
 	Warnings     uint16
 }
 
+// UnPackOK used to unpack the OK packet.
 // https://dev.mysql.com/doc/internals/en/packet-OK_Packet.html
 func UnPackOK(data []byte) (*OK, error) {
 	var err error
@@ -62,6 +65,7 @@ func UnPackOK(data []byte) (*OK, error) {
 	return o, nil
 }
 
+// PackOK used to pack the OK packet.
 func PackOK(o *OK) []byte {
 	buf := common.NewBuffer(64)
 

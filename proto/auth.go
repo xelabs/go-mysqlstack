@@ -17,6 +17,7 @@ import (
 	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
+// Auth packet.
 type Auth struct {
 	charset         uint8
 	maxPacketSize   uint32
@@ -28,37 +29,44 @@ type Auth struct {
 	user            string
 }
 
+// NewAuth creates new Auth.
 func NewAuth() *Auth {
 	return &Auth{}
 }
 
+// Database returns the database.
 func (a *Auth) Database() string {
 	return a.database
 }
 
+// ClientFlags returns the client flags.
 func (a *Auth) ClientFlags() uint32 {
 	return a.clientFlags
 }
 
+// Charset returns the charset.
 func (a *Auth) Charset() uint8 {
 	return a.charset
 }
 
+// User returns the user.
 func (a *Auth) User() string {
 	return a.user
 }
 
+// AuthResponse returns the auth response.
 func (a *Auth) AuthResponse() []byte {
 	return a.authResponse
 }
 
-// To imporve the heap gc cost.
+// CleanAuthResponse used to set the authResponse to nil.
+// To improve the heap gc cost.
 func (a *Auth) CleanAuthResponse() {
 	a.authResponse = nil
 }
 
-// https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeResponse41
 // UnPack parses the handshake sent by the client.
+// https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeResponse41
 func (a *Auth) UnPack(payload []byte) error {
 	var err error
 	buf := common.ReadBuffer(payload)
@@ -109,15 +117,8 @@ func (a *Auth) UnPack(payload []byte) error {
 	return nil
 }
 
-// HandshakeResponse41
-func (a *Auth) Pack(
-	capabilityFlags uint32,
-	charset uint8,
-	username string,
-	password string,
-	salt []byte,
-	database string,
-) []byte {
+// Pack used to pack a HandshakeResponse41 packet.
+func (a *Auth) Pack(capabilityFlags uint32, charset uint8, username string, password string, salt []byte, database string) []byte {
 	buf := common.NewBuffer(256)
 	authResponse := nativePassword(password, salt)
 	if len(database) > 0 {

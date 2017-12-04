@@ -17,6 +17,7 @@ import (
 	"github.com/XeLabs/go-mysqlstack/sqldb"
 )
 
+// Greeting used for greeting packet.
 type Greeting struct {
 	protocolVersion uint8
 	Charset         uint8
@@ -37,6 +38,7 @@ type Greeting struct {
 	Salt           []byte
 }
 
+// NewGreeting creates a new Greeting.
 func NewGreeting(connectionID uint32) *Greeting {
 	greeting := &Greeting{
 		protocolVersion: 10,
@@ -60,10 +62,12 @@ func byteRand(min int, max int) byte {
 	return byte(min + rand.Intn(max-min))
 }
 
+// Status returns status of greeting.
 func (g *Greeting) Status() uint16 {
 	return g.status
 }
 
+// Pack used to pack the greeting packet.
 // https://dev.mysql.com/doc/internals/en/connection-phase-packets.html#packet-Protocol::HandshakeV10
 func (g *Greeting) Pack() []byte {
 	// greeting buffer
@@ -117,6 +121,7 @@ func (g *Greeting) Pack() []byte {
 	return buf.Datas()
 }
 
+// UnPack used to unpack the greeting packet.
 func (g *Greeting) UnPack(payload []byte) error {
 	var err error
 	buf := common.ReadBuffer(payload)

@@ -50,7 +50,7 @@ func (result *Result) Less(i, j int) bool {
 	return ser.less(ser.idx, p, q)
 }
 
-// sorter
+// LessFunc implements the Less function of sorter interface.
 type LessFunc func(idx int, v1, v2 []Value) bool
 type sorter struct {
 	idx  int

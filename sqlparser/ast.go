@@ -42,7 +42,6 @@ import (
 // is the AST representation of the query. If a DDL statement
 // is partially parsed but still contains a syntax error, the
 // error is ignored and the DDL is returned anyway.
-
 func Parse(sql string) (Statement, error) {
 	tokenizer := NewStringTokenizer(sql)
 	if yyParse(tokenizer) != 0 {
@@ -349,7 +348,9 @@ type Insert struct {
 }
 
 const (
-	InsertStr  = "insert"
+	// InsertStr represents insert action.
+	InsertStr = "insert"
+	// ReplaceStr represents replace action.
 	ReplaceStr = "replace"
 )
 
@@ -578,6 +579,7 @@ func (node *DDL) WalkSubtree(visit Visit) error {
 	)
 }
 
+// TableOptions represents the table options.
 type TableOptions struct {
 	Engine  string
 	Charset string
@@ -845,10 +847,19 @@ type LengthScaleOption struct {
 type ColumnKeyOption int
 
 const (
+	// ColKeyNone enum.
 	ColKeyNone ColumnKeyOption = iota
+
+	// ColKeyPrimary enum.
 	ColKeyPrimary
+
+	// ColKeyUnique enum.
 	ColKeyUnique
+
+	// ColKeyUniqueKey enum.
 	ColKeyUniqueKey
+
+	// ColKey enum.
 	ColKey
 )
 

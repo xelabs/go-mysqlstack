@@ -34,6 +34,7 @@ type Rows interface {
 	RowValues() ([]sqltypes.Value, error)
 }
 
+// TextRows presents row tuple.
 type TextRows struct {
 	c            Conn
 	end          bool
@@ -46,6 +47,7 @@ type TextRows struct {
 	fields       []*querypb.Field
 }
 
+// NewTextRows creates TextRows.
 func NewTextRows(c Conn) *TextRows {
 	return &TextRows{
 		c:      c,
@@ -53,6 +55,7 @@ func NewTextRows(c Conn) *TextRows {
 	}
 }
 
+// Next implements the Rows interface.
 // http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow
 func (r *TextRows) Next() bool {
 	defer func() {
@@ -102,6 +105,7 @@ func (r *TextRows) Close() error {
 	return r.LastError()
 }
 
+// RowValues implements the Rows interface.
 // https://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::ResultsetRow
 func (r *TextRows) RowValues() ([]sqltypes.Value, error) {
 	if r.fields == nil {
@@ -126,15 +130,16 @@ func (r *TextRows) RowValues() ([]sqltypes.Value, error) {
 	}
 	if empty {
 		return nil, nil
-	} else {
-		return result, nil
 	}
+	return result, nil
 }
 
+// Datas implements the Rows interface.
 func (r *TextRows) Datas() []byte {
 	return r.buffer.Datas()
 }
 
+// Fields implements the Rows interface.
 func (r *TextRows) Fields() []*querypb.Field {
 	return r.fields
 }
@@ -144,14 +149,17 @@ func (r *TextRows) Bytes() int {
 	return r.bytes
 }
 
+// RowsAffected implements the Rows interface.
 func (r *TextRows) RowsAffected() uint64 {
 	return r.rowsAffected
 }
 
+// LastInsertID implements the Rows interface.
 func (r *TextRows) LastInsertID() uint64 {
 	return r.insertID
 }
 
+// LastError implements the Rows interface.
 func (r *TextRows) LastError() error {
 	return r.err
 }

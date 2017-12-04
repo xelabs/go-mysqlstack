@@ -7,10 +7,6 @@
  *
  */
 
-// stream.go
-// handles the raw mysql packets without bytes copy
-// More than 16MByte packet:
-// https://dev.mysql.com/doc/internals/en/sending-more-than-16mbyte.html
 package packet
 
 import (
@@ -24,6 +20,7 @@ const (
 	PACKET_BUFFER_SIZE = 32 * 1024
 )
 
+// Stream represents the stream tuple.
 type Stream struct {
 	pktMaxSize int
 	header     []byte
@@ -31,6 +28,7 @@ type Stream struct {
 	writer     *bufio.Writer
 }
 
+// NewStream creates a new stream.
 func NewStream(conn net.Conn, pktMaxSize int) *Stream {
 	return &Stream{
 		pktMaxSize: pktMaxSize,
@@ -72,11 +70,10 @@ func (s *Stream) Read() (*Packet, error) {
 	next, err := s.Read()
 	if err != nil {
 		return nil, err
-	} else {
-		pkt.SequenceID = next.SequenceID
-		pkt.Datas = append(pkt.Datas, next.Datas...)
-		return pkt, nil
 	}
+	pkt.SequenceID = next.SequenceID
+	pkt.Datas = append(pkt.Datas, next.Datas...)
+	return pkt, nil
 }
 
 // Write writes the packet to writer
@@ -84,13 +81,10 @@ func (s *Stream) Write(data []byte) error {
 	if err := s.Append(data); err != nil {
 		return err
 	}
-
-	if err := s.Flush(); err != nil {
-		return err
-	}
-	return nil
+	return s.Flush()
 }
 
+// Append used to append data to write buffer.
 func (s *Stream) Append(data []byte) error {
 	payLen := len(data) - 4
 	sequence := data[3]
@@ -120,6 +114,7 @@ func (s *Stream) Append(data []byte) error {
 	return nil
 }
 
+// Flush used to flush the writer.
 func (s *Stream) Flush() error {
 	return s.writer.Flush()
 }

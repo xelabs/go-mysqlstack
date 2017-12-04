@@ -23,6 +23,7 @@ import (
 	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
+// Session is a client connection with greeting and auth.
 type Session struct {
 	id       uint32
 	mu       sync.RWMutex
@@ -106,16 +107,15 @@ func (s *Session) flush() error {
 
 func (s *Session) writeResult(result *sqltypes.Result) error {
 	if len(result.Fields) == 0 {
-		if result.State == sqltypes.RState_None {
+		if result.State == sqltypes.RStateNone {
 			// This is just an INSERT result, send an OK packet.
 			return s.packets.WriteOK(result.RowsAffected, result.InsertID, s.greeting.Status(), result.Warnings)
-		} else {
-			return fmt.Errorf("unexpected: result.without.no.fields.but.has.rows.result:%+v", result)
 		}
+		return fmt.Errorf("unexpected: result.without.no.fields.but.has.rows.result:%+v", result)
 	}
 
 	switch result.State {
-	case sqltypes.RState_None:
+	case sqltypes.RStateNone:
 		if err := s.writeFields(result); err != nil {
 			return err
 		}
@@ -125,15 +125,15 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 		if err := s.writeFinish(result); err != nil {
 			return err
 		}
-	case sqltypes.RState_Fields:
+	case sqltypes.RStateFields:
 		if err := s.writeFields(result); err != nil {
 			return err
 		}
-	case sqltypes.RState_Rows:
+	case sqltypes.RStateRows:
 		if err := s.writeRows(result); err != nil {
 			return err
 		}
-	case sqltypes.RState_Finished:
+	case sqltypes.RStateFinished:
 		if err := s.writeFinish(result); err != nil {
 			return err
 		}
@@ -141,6 +141,7 @@ func (s *Session) writeResult(result *sqltypes.Result) error {
 	return s.flush()
 }
 
+// Close used to close the connection.
 func (s *Session) Close() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -150,52 +151,59 @@ func (s *Session) Close() {
 	}
 }
 
+// ID returns the connection ID.
 func (s *Session) ID() uint32 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.id
 }
 
+// Addr returns the remote address.
 func (s *Session) Addr() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.conn != nil {
 		return s.conn.RemoteAddr().String()
-	} else {
-		return "unknow"
 	}
+	return "unknow"
 }
 
+// SetSchema used to set the schema.
 func (s *Session) SetSchema(schema string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.schema = schema
 }
 
+// Schema returns the schema.
 func (s *Session) Schema() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.schema
 }
 
+// User returns the user of auth.
 func (s *Session) User() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.auth.User()
 }
 
+// Salt returns the salt of greeting.
 func (s *Session) Salt() []byte {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.greeting.Salt
 }
 
+// Scramble returns the scramble of auth.
 func (s *Session) Scramble() []byte {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.auth.AuthResponse()
 }
 
+// Charset returns the charset of auth.
 func (s *Session) Charset() uint8 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

@@ -35,7 +35,7 @@ type BinWriter interface {
 }
 
 // Value can store any SQL value. If the value represents
-// an integral type, the bytes are always stored as a cannonical
+// an integral type, the bytes are always stored as a canonical
 // representation that matches how MySQL returns such values.
 type Value struct {
 	typ querypb.Type
@@ -43,7 +43,7 @@ type Value struct {
 }
 
 // MakeTrusted makes a new Value based on the type.
-// If the value is an integral, then val must be in its cannonical
+// If the value is an integral, then val must be in its canonical
 // form. This function should only be used if you know the value
 // and type conform to the rules.  Every place this function is
 // called, a comment is needed that explains why it's justified.
@@ -86,7 +86,7 @@ func NewVarBinary(v string) Value {
 	return MakeTrusted(VarBinary, []byte(v))
 }
 
-// NewIntegral builds an integral type from a string representaion.
+// NewIntegral builds an integral type from a string representation.
 // The type will be Int64 or Uint64. Int64 will be preferred where possible.
 func NewIntegral(val string) (n Value, err error) {
 	signed, err := strconv.ParseInt(val, 0, 64)
@@ -174,7 +174,7 @@ func BuildConverted(typ querypb.Type, goval interface{}) (v Value, err error) {
 
 // ValueFromBytes builds a Value using typ and val. It ensures that val
 // matches the requested type. If type is an integral it's converted to
-// a cannonical form. Otherwise, the original representation is preserved.
+// a canonical form. Otherwise, the original representation is preserved.
 func ValueFromBytes(typ querypb.Type, val []byte) (v Value, err error) {
 	switch {
 	case IsSigned(typ):
@@ -204,7 +204,7 @@ func ValueFromBytes(typ querypb.Type, val []byte) (v Value, err error) {
 	return v, nil
 }
 
-// BuildIntegral builds an integral type from a string representaion.
+// BuildIntegral builds an integral type from a string representation.
 // The type will be Int64 or Uint64. Int64 will be preferred where possible.
 func BuildIntegral(val string) (n Value, err error) {
 	signed, err := strconv.ParseInt(val, 0, 64)
@@ -235,8 +235,10 @@ func (v Value) Len() int {
 	return len(v.val)
 }
 
+// Values represents the array of Value.
 type Values []Value
 
+// Len implements the interface.
 func (vs Values) Len() int {
 	len := 0
 	for _, v := range vs {
