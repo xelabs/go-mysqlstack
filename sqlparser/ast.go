@@ -868,6 +868,8 @@ type Show struct {
 	Type     string
 	Table    TableName
 	Database TableName
+	From     string
+	Limit    *Limit
 }
 
 // The frollowing constants represent SHOW statements.
@@ -885,6 +887,7 @@ const (
 	ShowTxnzStr           = "txnz"
 	ShowWarningsStr       = "warnings"
 	ShowVariablesStr      = "variables"
+	ShowBinlogEventsStr   = "binlog events"
 	ShowUnsupportedStr    = "unsupported"
 )
 
@@ -897,6 +900,12 @@ func (node *Show) Format(buf *TrackedBuffer) {
 		buf.Myprintf("show %s %v", node.Type, node.Table)
 	case ShowTablesFromStr:
 		buf.Myprintf("show %s %v", node.Type, node.Database)
+	case ShowBinlogEventsStr:
+		buf.Myprintf("show %s", node.Type)
+		if node.From != "" {
+			buf.Myprintf(" from gtid '%s'", node.From)
+		}
+		buf.Myprintf("%v", node.Limit)
 	default:
 		buf.Myprintf("show %s", node.Type)
 	}

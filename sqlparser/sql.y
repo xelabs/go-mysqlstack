@@ -154,7 +154,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL
 
 // Supported SHOW tokens
-%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VSCHEMA_TABLES WARNINGS VARIABLES
+%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VSCHEMA_TABLES WARNINGS VARIABLES EVENTS BINLOG GTID
 
 // Functions
 %token <bytes> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
@@ -183,7 +183,7 @@ func forceEOF(yylex interface{}) {
 %type <statement> analyze_statement show_statement use_statement other_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op insert_or_replace
-%type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt
+%type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt binlog_from_opt
 %type <expr> like_escape_opt
 %type <selectExprs> select_expression_list select_expression_list_opt
 %type <selectExpr> select_expression
@@ -1012,6 +1012,19 @@ show_statement:
 | SHOW VARIABLES force_eof
   {
     $$ = &Show{Type: ShowVariablesStr}
+  }
+| SHOW BINLOG EVENTS binlog_from_opt limit_opt force_eof
+  {
+    $$ = &Show{Type: ShowBinlogEventsStr, From: $4, Limit: $5 }
+  }
+
+binlog_from_opt:
+  {
+    $$ = ""
+  }
+| FROM GTID STRING
+  {
+    $$ = string($3)
   }
 
 use_statement:

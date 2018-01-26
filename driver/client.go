@@ -139,6 +139,14 @@ func NewConn(username, password, address, database, charset string) (Conn, error
 	if c.netConn, err = net.DialTimeout("tcp", address, timeout); err != nil {
 		return nil, err
 	}
+
+	// Set KeepAlive to True and period to 180s.
+	if tcpConn, ok := c.netConn.(*net.TCPConn); ok {
+		tcpConn.SetKeepAlive(true)
+		tcpConn.SetKeepAlivePeriod(time.Second * 180)
+		c.netConn = tcpConn
+	}
+
 	defer func() {
 		if err != nil {
 			c.Cleanup()

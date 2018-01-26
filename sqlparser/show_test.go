@@ -88,6 +88,22 @@ func TestShow1(t *testing.T) {
 			input:  "show variables",
 			output: "show variables",
 		},
+		{
+			input:  "show binlog events",
+			output: "show binlog events",
+		},
+		{
+			input:  "show binlog events limit 10",
+			output: "show binlog events limit 10",
+		},
+		{
+			input:  "show binlog events from gtid '20171225083823'",
+			output: "show binlog events from gtid '20171225083823'",
+		},
+		{
+			input:  "show binlog events from gtid '20171225083823' limit 1",
+			output: "show binlog events from gtid '20171225083823' limit 1",
+		},
 	}
 
 	for _, show := range validSQL {

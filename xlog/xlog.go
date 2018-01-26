@@ -141,11 +141,7 @@ func (t *Log) Error(format string, v ...interface{}) {
 	if ERROR < t.opts.Level {
 		return
 	}
-	msg := fmt.Sprintf(format, v...)
-	if len(msg) > 1024 {
-		msg = msg[:1024]
-	}
-	t.log("\t  [ERROR]  \t%s", msg)
+	t.log("\t  [ERROR]  \t%s", fmt.Sprintf(format, v...))
 }
 
 // Fatal used to log faltal msg.
