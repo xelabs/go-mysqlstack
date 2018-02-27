@@ -23,7 +23,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 // Instructions for creating new types: If a type

@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/bytes2"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/bytes2"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 const eofChar = 0x100

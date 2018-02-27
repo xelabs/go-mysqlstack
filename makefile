@@ -5,6 +5,7 @@ fmt:
 	go vet ./...
 
 test:
+	go get github.com/stretchr/testify/assert
 	@echo "--> Testing..."
 	@$(MAKE) testxlog
 	@$(MAKE) testsqlparser

@@ -13,8 +13,8 @@ import (
 	"crypto/sha1"
 	"fmt"
 
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/sqldb"
+	"github.com/xelabs/go-mysqlstack/common"
+	"github.com/xelabs/go-mysqlstack/sqldb"
 )
 
 // Auth packet.

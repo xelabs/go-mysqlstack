@@ -12,8 +12,8 @@ package driver
 import (
 	"testing"
 
-	"github.com/XeLabs/go-mysqlstack/xlog"
 	"github.com/stretchr/testify/assert"
+	"github.com/xelabs/go-mysqlstack/xlog"
 )
 
 func TestSession(t *testing.T) {

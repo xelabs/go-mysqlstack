@@ -14,11 +14,11 @@ import (
 	"runtime"
 	"runtime/debug"
 
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/sqldb"
-	"github.com/XeLabs/go-mysqlstack/xlog"
+	"github.com/xelabs/go-mysqlstack/common"
+	"github.com/xelabs/go-mysqlstack/sqldb"
+	"github.com/xelabs/go-mysqlstack/xlog"
 
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 // Handler interface.

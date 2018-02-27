@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 func TestRepair(t *testing.T) {

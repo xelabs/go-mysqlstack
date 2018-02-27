@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 func TestNormalize(t *testing.T) {

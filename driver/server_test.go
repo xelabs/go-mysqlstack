@@ -12,12 +12,12 @@ package driver
 import (
 	"testing"
 
-	"github.com/XeLabs/go-mysqlstack/sqldb"
-	"github.com/XeLabs/go-mysqlstack/xlog"
 	"github.com/stretchr/testify/assert"
+	"github.com/xelabs/go-mysqlstack/sqldb"
+	"github.com/xelabs/go-mysqlstack/xlog"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 func TestServer(t *testing.T) {

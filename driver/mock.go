@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/XeLabs/go-mysqlstack/sqldb"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
-	"github.com/XeLabs/go-mysqlstack/xlog"
+	"github.com/xelabs/go-mysqlstack/sqldb"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/xlog"
 )
 
 func randomPort(min int, max int) int {

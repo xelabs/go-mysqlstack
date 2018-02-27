@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"testing"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 func TestSorter(t *testing.T) {

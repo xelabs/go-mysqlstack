@@ -15,9 +15,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
-	"github.com/XeLabs/go-mysqlstack/xlog"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/xlog"
 )
 
 func TestClient(t *testing.T) {

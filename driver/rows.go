@@ -12,11 +12,11 @@ package driver
 import (
 	"errors"
 
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/proto"
+	"github.com/xelabs/go-mysqlstack/common"
+	"github.com/xelabs/go-mysqlstack/proto"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 var _ Rows = &TextRows{}

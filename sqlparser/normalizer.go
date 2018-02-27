@@ -7,8 +7,8 @@ package sqlparser
 import (
 	"fmt"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 // Normalize changes the statement to use bind values, and

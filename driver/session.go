@@ -14,13 +14,13 @@ import (
 	"net"
 	"sync"
 
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/packet"
-	"github.com/XeLabs/go-mysqlstack/proto"
-	"github.com/XeLabs/go-mysqlstack/sqldb"
-	"github.com/XeLabs/go-mysqlstack/xlog"
+	"github.com/xelabs/go-mysqlstack/common"
+	"github.com/xelabs/go-mysqlstack/packet"
+	"github.com/xelabs/go-mysqlstack/proto"
+	"github.com/xelabs/go-mysqlstack/sqldb"
+	"github.com/xelabs/go-mysqlstack/xlog"
 
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 )
 
 // Session is a client connection with greeting and auth.

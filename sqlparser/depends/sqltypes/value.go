@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/hack"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/hack"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 var (

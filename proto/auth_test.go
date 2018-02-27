@@ -12,9 +12,9 @@ package proto
 import (
 	"testing"
 
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/sqldb"
 	"github.com/stretchr/testify/assert"
+	"github.com/xelabs/go-mysqlstack/common"
+	"github.com/xelabs/go-mysqlstack/sqldb"
 )
 
 func TestAuth(t *testing.T) {

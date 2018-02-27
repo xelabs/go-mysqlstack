@@ -12,8 +12,8 @@ package proto
 import (
 	"testing"
 
-	"github.com/XeLabs/go-mysqlstack/common"
 	"github.com/stretchr/testify/assert"
+	"github.com/xelabs/go-mysqlstack/common"
 )
 
 func TestOK(t *testing.T) {

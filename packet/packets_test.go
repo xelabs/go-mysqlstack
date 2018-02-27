@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/XeLabs/go-mysqlstack/common"
-	"github.com/XeLabs/go-mysqlstack/proto"
-	"github.com/XeLabs/go-mysqlstack/sqlparser/depends/sqltypes"
 	"github.com/stretchr/testify/assert"
+	"github.com/xelabs/go-mysqlstack/common"
+	"github.com/xelabs/go-mysqlstack/proto"
+	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
 
-	querypb "github.com/XeLabs/go-mysqlstack/sqlparser/depends/query"
+	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
 )
 
 func TestPacketsNext(t *testing.T) {
