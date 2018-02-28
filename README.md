@@ -12,7 +12,7 @@ Protocol is based on [mysqlproto-go](https://github.com/pubnative/mysqlproto-go)
 $ mkdir src
 $ export GOPATH=`pwd`
 $ go get -u github.com/xelabs/go-mysqlstack/driver
-$ cd github.com/xelabs/go-mysqlstack/
+$ cd src/github.com/xelabs/go-mysqlstack/
 $ make test
 ```
 
