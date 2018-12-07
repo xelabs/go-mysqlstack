@@ -174,6 +174,16 @@ func (th *TestHandler) NewSession(s *Session) {
 	th.ss[s.ID()] = st
 }
 
+// SessionInc implements the interface.
+func (th *TestHandler) SessionInc(s *Session) {
+
+}
+
+// SessionDec implements the interface.
+func (th *TestHandler) SessionDec(s *Session) {
+
+}
+
 // SessionClosed implements the interface.
 func (th *TestHandler) SessionClosed(s *Session) {
 	th.mu.Lock()
@@ -367,7 +377,7 @@ func (th *TestHandler) GetQueryCalledNum(query string) int {
 
 // MockMysqlServer creates a new mock mysql server.
 func MockMysqlServer(log *xlog.Log, h Handler) (svr *Listener, err error) {
-	port := randomPort(10000, 20000)
+	port := randomPort(10000, 60000)
 	return mockMysqlServer(log, port, h)
 }
 

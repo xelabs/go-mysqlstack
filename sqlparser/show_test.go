@@ -35,8 +35,23 @@ func TestShow1(t *testing.T) {
 		},
 
 		{
+			input:  "show full tables",
+			output: "show full tables",
+		},
+
+		{
+			input:  "show full tables from t1",
+			output: "show full tables from t1",
+		},
+
+		{
+			input: "show full tables where Table_type != 'VIEW'",
+			output: "show full tables where Table_type != 'VIEW'",
+		},
+
+		{
 			input:  "show tables from t1",
-			output: "show tables",
+			output: "show tables from t1",
 		},
 
 		{
@@ -103,6 +118,10 @@ func TestShow1(t *testing.T) {
 		{
 			input:  "show binlog events from gtid '20171225083823' limit 1",
 			output: "show binlog events from gtid '20171225083823' limit 1",
+		},
+		{
+			input:  "show columns from t1",
+			output: "show columns from t1",
 		},
 	}
 

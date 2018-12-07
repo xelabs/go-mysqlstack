@@ -101,7 +101,7 @@ func forceEOF(yylex interface{}) {
 %token LEX_ERROR
 %left <bytes> UNION
 %token <bytes> SELECT INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
-%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE KEY DEFAULT SET LOCK
+%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE KEY DEFAULT SET LOCK FULL
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
 %token <bytes> SQL_NO_CACHE SQL_CACHE
@@ -154,7 +154,7 @@ func forceEOF(yylex interface{}) {
 %token <bytes> NULLX AUTO_INCREMENT APPROXNUM SIGNED UNSIGNED ZEROFILL
 
 // Supported SHOW tokens
-%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VSCHEMA_TABLES WARNINGS VARIABLES EVENTS BINLOG GTID
+%token <bytes> DATABASES TABLES VITESS_KEYSPACES VITESS_SHARDS VSCHEMA_TABLES WARNINGS VARIABLES EVENTS BINLOG GTID STATUS COLUMNS
 
 // Functions
 %token <bytes> CURRENT_TIMESTAMP DATABASE CURRENT_DATE
@@ -173,7 +173,10 @@ func forceEOF(yylex interface{}) {
 // RadonDB
 %token <empty> PARTITION PARTITIONS HASH XA
 %type <statement> truncate_statement xa_statement explain_statement kill_statement transaction_statement
-%token <bytes> ENGINES STATUS VERSIONS PROCESSLIST QUERYZ TXNZ KILL START TRANSACTION COMMIT SESSION ENGINE
+%token <bytes> ENGINES VERSIONS PROCESSLIST QUERYZ TXNZ KILL SESSION ENGINE
+// Transaction Tokens
+%token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
+
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -191,7 +194,7 @@ func forceEOF(yylex interface{}) {
 %type <tableExprs> from_opt table_references
 %type <tableExpr> table_reference table_factor join_table
 %type <str> inner_join outer_join natural_join
-%type <tableName> table_name into_table_name
+%type <tableName> table_name into_table_name database_from_opt
 %type <aliasedTableName> aliased_table_name
 %type <indexHints> index_hint_list
 %type <colIdents> index_list
@@ -960,9 +963,17 @@ kill_statement:
   }
 
 transaction_statement:
-  START TRANSACTION force_eof
+  BEGIN force_eof
+  {
+    $$ = &Transaction{ Action: BeginTxnStr}
+  }
+| START TRANSACTION force_eof
   {
     $$ = &Transaction{ Action: StartTxnStr}
+  }
+| ROLLBACK force_eof
+  {
+    $$ = &Transaction{ Action: RollbackTxnStr}
   }
 | COMMIT force_eof
   {
@@ -977,7 +988,7 @@ show_statement_type:
 | reserved_keyword
   {
     switch v := string($1); v {
-    case ShowDatabasesStr, ShowTablesStr, ShowEnginesStr, ShowVersionsStr, ShowProcesslistStr, ShowQueryzStr, ShowTxnzStr, ShowStatusStr:
+    case ShowDatabasesStr, ShowTablesStr, ShowEnginesStr, ShowVersionsStr, ShowProcesslistStr, ShowQueryzStr, ShowTxnzStr, ShowColumnsStr:
       $$ = v
     default:
       $$ = ShowUnsupportedStr
@@ -993,9 +1004,17 @@ show_statement:
   {
     $$ = &Show{Type: $2}
   }
-| SHOW TABLES FROM table_name force_eof
+|  SHOW TABLES FROM table_name force_eof
   {
     $$ = &Show{Type: ShowTablesStr, Database: $4}
+  }
+| SHOW FULL TABLES database_from_opt where_expression_opt force_eof
+  {
+    $$ = &Show{Type: ShowFullTablesStr, Database: $4, Where: NewWhere(WhereStr, $5)}
+  }
+| SHOW COLUMNS FROM table_name force_eof
+  {
+    $$ = &Show{Type: ShowColumnsStr, Table: $4}
   }
 | SHOW CREATE TABLE table_name force_eof
   {
@@ -1017,6 +1036,10 @@ show_statement:
   {
     $$ = &Show{Type: ShowBinlogEventsStr, From: $4, Limit: $5 }
   }
+| SHOW STATUS force_eof
+  {
+    $$ = &Show{Type: ShowStatusStr}
+  }
 
 binlog_from_opt:
   {
@@ -1025,6 +1048,15 @@ binlog_from_opt:
 | FROM GTID STRING
   {
     $$ = string($3)
+  }
+
+database_from_opt:
+  {
+    $$ = TableName{}
+  }
+| FROM table_name
+  {
+    $$ = $2
   }
 
 use_statement:
@@ -2342,6 +2374,7 @@ reserved_keyword:
 | FOR
 | FORCE
 | FROM
+| FULL
 | GROUP
 | HAVING
 | IF
@@ -2381,10 +2414,10 @@ reserved_keyword:
 | SEPARATOR
 | SET
 | SHOW
-| STATUS
 | STRAIGHT_JOIN
 | TABLE
 | TABLES
+| COLUMNS 
 | THEN
 | TO
 | TRUE

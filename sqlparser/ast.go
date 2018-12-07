@@ -870,6 +870,7 @@ type Show struct {
 	Database TableName
 	From     string
 	Limit    *Limit
+	Where    *Where
 }
 
 // The frollowing constants represent SHOW statements.
@@ -877,7 +878,8 @@ const (
 	ShowDatabasesStr      = "databases"
 	ShowCreateDatabaseStr = "create database"
 	ShowTablesStr         = "tables"
-	ShowTablesFromStr     = "tables from"
+	ShowColumnsStr        = "columns"
+	ShowFullTablesStr     = "full tables"
 	ShowCreateTableStr    = "create table"
 	ShowEnginesStr        = "engines"
 	ShowStatusStr         = "status"
@@ -898,14 +900,30 @@ func (node *Show) Format(buf *TrackedBuffer) {
 		buf.Myprintf("show %s %v", node.Type, node.Database)
 	case ShowCreateTableStr:
 		buf.Myprintf("show %s %v", node.Type, node.Table)
-	case ShowTablesFromStr:
-		buf.Myprintf("show %s %v", node.Type, node.Database)
+	case ShowTablesStr:
+		buf.Myprintf("show %s", node.Type)
+		if node.Database.Name.String() != "" {
+			buf.Myprintf(" from %s", node.Database.Name.String())
+		}
+	case ShowFullTablesStr:
+		buf.Myprintf("show %s", node.Type)
+		if node.Database.Name.String() != "" {
+			buf.Myprintf(" from %s", node.Database.Name.String())
+		}
+		if node.Where != nil {
+			buf.Myprintf("%v", node.Where)
+		}
 	case ShowBinlogEventsStr:
 		buf.Myprintf("show %s", node.Type)
 		if node.From != "" {
 			buf.Myprintf(" from gtid '%s'", node.From)
 		}
 		buf.Myprintf("%v", node.Limit)
+	case ShowColumnsStr:
+		buf.Myprintf("show %s", node.Type)
+		if node.Table.Name.String() != "" {
+			buf.Myprintf(" from %s", node.Table.Name.String())
+		}
 	default:
 		buf.Myprintf("show %s", node.Type)
 	}
