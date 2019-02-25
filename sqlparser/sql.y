@@ -80,6 +80,8 @@ func forceEOF(yylex interface{}) {
   limit         *Limit
   updateExprs   UpdateExprs
   updateExpr    *UpdateExpr
+  setExprs      SetExprs
+  setExpr       *SetExpr
   colIdent      ColIdent
   colIdents     []ColIdent
   tableIdent    TableIdent
@@ -109,7 +111,7 @@ func forceEOF(yylex interface{}) {
 %left <bytes> ON
 %token <empty> '(' ',' ')'
 %token <bytes> ID HEX STRING INTEGRAL FLOAT HEXNUM VALUE_ARG LIST_ARG COMMENT COMMENT_KEYWORD
-%token <bytes> NULL TRUE FALSE
+%token <bytes> NULL TRUE FALSE OFF
 
 // Precedence dictated by mysql. But the vitess grammar is simplified.
 // Some of these operators don't conflict in our situation. Nevertheless,
@@ -173,10 +175,11 @@ func forceEOF(yylex interface{}) {
 // RadonDB
 %token <empty> PARTITION PARTITIONS HASH XA
 %type <statement> truncate_statement xa_statement explain_statement kill_statement transaction_statement
-%token <bytes> ENGINES VERSIONS PROCESSLIST QUERYZ TXNZ KILL SESSION ENGINE
+%token <bytes> ENGINES VERSIONS PROCESSLIST QUERYZ TXNZ KILL ENGINE
 // Transaction Tokens
 %token <bytes> BEGIN START TRANSACTION COMMIT ROLLBACK
-
+// SET tokens
+%token <bytes> GLOBAL SESSION NAMES
 
 %type <statement> command
 %type <selStmt> select_statement base_select union_lhs union_rhs
@@ -227,16 +230,21 @@ func forceEOF(yylex interface{}) {
 %type <updateExprs> on_dup_opt
 %type <updateExprs> update_list
 %type <updateExpr> update_expression
+%type <setExprs> set_list
+%type <setExpr> set_expression
+%type <expr> charset_value
+%type <bytes> charset_or_character_set
 %type <bytes> for_from
 %type <str> ignore_opt default_opt
 %type <byt> exists_opt not_exists_opt
-%type <empty> non_rename_operation to_opt index_opt
+%type <empty> non_rename_operation to_opt index_opt constraint_opt
 %type <bytes> reserved_keyword non_reserved_keyword
 %type <colIdent> sql_id reserved_sql_id col_alias as_ci_opt
 %type <tableIdent> table_id reserved_table_id table_alias as_opt_id
 %type <empty> as_opt
 %type <empty> force_eof ddl_force_eof
 %type <str> charset
+%type <str> set_session_or_global
 %type <convertType> convert_type
 %type <str> show_statement_type
 %type <columnType> column_type
@@ -385,10 +393,25 @@ delete_statement:
   }
 
 set_statement:
-  SET force_eof
+  SET comment_opt set_list
   {
-    $$ = &Set{}
+    $$ = &Set{Comments: Comments($2), Exprs: $3}
   }
+  | SET comment_opt set_session_or_global set_list
+  {
+    $$ = &Set{Comments: Comments($2), Exprs: $4}
+  }
+
+set_session_or_global:
+  SESSION
+  {
+    $$ = SessionStr
+  }
+| GLOBAL
+  {
+    $$ = GlobalStr
+  }
+
 
 create_statement:
   create_table_prefix table_spec
@@ -412,10 +435,10 @@ create_statement:
     }
     $$ = &DDL{Action: CreateDBStr, IfNotExists:ifnotexists, Database: $4}
   }
-| CREATE INDEX ID ON table_name ddl_force_eof
+| CREATE constraint_opt INDEX ID ON table_name ddl_force_eof
   {
     // Change this to an alter statement
-    $$ = &DDL{Action: CreateIndexStr, IndexName:string($3), Table: $5, NewName:$5}
+    $$ = &DDL{Action: CreateIndexStr, IndexName:string($4), Table: $6, NewName:$6}
   }
 
 create_table_prefix:
@@ -2240,6 +2263,49 @@ update_expression:
     $$ = &UpdateExpr{Name: $1, Expr: $3}
   }
 
+set_list:
+  set_expression
+  {
+    $$ = SetExprs{$1}
+  }
+| set_list ',' set_expression
+  {
+    $$ = append($1, $3)
+  }
+
+set_expression:
+  reserved_sql_id '=' expression
+  {
+    $$ = &SetExpr{Name: $1, Expr: $3}
+  }
+  | charset_or_character_set charset_value collate_opt
+  {
+    $$ = &SetExpr{Name: NewColIdent(string($1)), Expr: $2}
+  }
+
+charset_or_character_set:
+  CHARSET
+| CHARACTER SET
+  {
+    $$ = []byte("charset")
+  }
+| NAMES
+
+charset_value:
+  sql_id
+  {
+    $$ = NewStrVal([]byte($1.String()))
+  }
+| STRING
+  {
+    $$ = NewStrVal($1)
+  }
+| DEFAULT
+  {
+    $$ = &Default{}
+  }
+
+
 for_from:
   FOR
 | FROM
@@ -2292,6 +2358,13 @@ index_opt:
   INDEX
   { $$ = struct{}{} }
 | KEY
+  { $$ = struct{}{} }
+
+constraint_opt:
+  { $$ = struct{}{} }
+| UNIQUE
+  { $$ = struct{}{} }
+| sql_id
   { $$ = struct{}{} }
 
 sql_id:
@@ -2400,6 +2473,7 @@ reserved_keyword:
 | NEXT // next should be doable as non-reserved, but is not due to the special `select next num_val` query that vitess supports
 | NOT
 | NULL
+| OFF
 | ON
 | OR
 | ORDER
@@ -2459,6 +2533,7 @@ non_reserved_keyword:
 | ENGINE
 | EXPANSION
 | FLOAT_TYPE
+| GLOBAL
 | INT
 | INTEGER
 | JSON
