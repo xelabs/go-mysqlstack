@@ -35,13 +35,13 @@ type Session struct {
 	greeting *proto.Greeting
 }
 
-func newSession(log *xlog.Log, ID uint32, conn net.Conn) *Session {
+func newSession(log *xlog.Log, ID uint32, serverVersion string, conn net.Conn) *Session {
 	return &Session{
 		id:       ID,
 		log:      log,
 		conn:     conn,
 		auth:     proto.NewAuth(),
-		greeting: proto.NewGreeting(ID),
+		greeting: proto.NewGreeting(ID, serverVersion),
 		packets:  packet.NewPackets(conn),
 	}
 }
@@ -50,7 +50,7 @@ func (s *Session) writeErrFromError(err error) error {
 	if se, ok := err.(*sqldb.SQLError); ok {
 		return s.packets.WriteERR(se.Num, se.State, "%v", se.Message)
 	}
-	unknow := sqldb.NewSQLError(sqldb.ER_UNKNOWN_ERROR, "%v", err)
+	unknow := sqldb.NewSQLErrorf(sqldb.ER_UNKNOWN_ERROR, "%v", err)
 	return s.packets.WriteERR(unknow.Num, unknow.State, unknow.Message)
 }
 
@@ -61,7 +61,7 @@ func (s *Session) writeFields(result *sqltypes.Result) error {
 	}
 
 	if (s.auth.ClientFlags() & sqldb.CLIENT_DEPRECATE_EOF) == 0 {
-		if err := s.packets.AppendEOF(); err != nil {
+		if err := s.packets.AppendEOF(s.greeting.Status(), result.Warnings); err != nil {
 			return err
 		}
 	}
@@ -89,7 +89,7 @@ func (s *Session) writeRows(result *sqltypes.Result) error {
 func (s *Session) writeFinish(result *sqltypes.Result) error {
 	// 3. Write EOF.
 	if (s.auth.ClientFlags() & sqldb.CLIENT_DEPRECATE_EOF) == 0 {
-		if err := s.packets.AppendEOF(); err != nil {
+		if err := s.packets.AppendEOF(s.greeting.Status(), result.Warnings); err != nil {
 			return err
 		}
 	} else {

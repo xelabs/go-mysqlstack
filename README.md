@@ -36,10 +36,6 @@ $ go run example/client.go
 
 go-mysqlstack is production ready.
 
-## Projects using go-mysqlstack
-
-- [RadonDB](https://github.com/radondb/radon) - cloud-native MySQL database, using go-mysqlstack as MySQL protocol stack.
-
 ## License
 
 go-mysqlstack is released under the GPLv3. See LICENSE

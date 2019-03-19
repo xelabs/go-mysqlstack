@@ -694,6 +694,7 @@ type ColumnType struct {
 	NotNull       BoolVal
 	Autoincrement BoolVal
 	Default       *SQLVal
+	OnUpdate      *SQLVal
 	Comment       *SQLVal
 
 	// Numeric field options
@@ -746,6 +747,9 @@ func (ct *ColumnType) Format(buf *TrackedBuffer) {
 	}
 	if ct.Default != nil {
 		opts = append(opts, keywordStrings[DEFAULT], String(ct.Default))
+	}
+	if ct.OnUpdate != nil {
+		opts = append(opts, keywordStrings[ON], keywordStrings[UPDATE], String(ct.OnUpdate))
 	}
 	if ct.Autoincrement {
 		opts = append(opts, keywordStrings[AUTO_INCREMENT])
@@ -883,6 +887,7 @@ type Show struct {
 const (
 	ShowDatabasesStr      = "databases"
 	ShowCreateDatabaseStr = "create database"
+	ShowTableStatusStr    = "table status"
 	ShowTablesStr         = "tables"
 	ShowColumnsStr        = "columns"
 	ShowFullTablesStr     = "full tables"
@@ -904,6 +909,11 @@ func (node *Show) Format(buf *TrackedBuffer) {
 	switch node.Type {
 	case ShowCreateDatabaseStr:
 		buf.Myprintf("show %s %v", node.Type, node.Database)
+	case ShowTableStatusStr:
+		buf.Myprintf("show %s", node.Type)
+		if node.Database.Name.String() != "" {
+			buf.Myprintf(" from %s", node.Database.Name.String())
+		}
 	case ShowCreateTableStr:
 		buf.Myprintf("show %s %v", node.Type, node.Table)
 	case ShowTablesStr:

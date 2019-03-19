@@ -52,7 +52,7 @@ func (p *Packets) Next() ([]byte, error) {
 	}
 
 	if pkt.SequenceID != p.seq {
-		return nil, sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "pkt.read.seq[%v]!=pkt.actual.seq[%v]", pkt.SequenceID, p.seq)
+		return nil, sqldb.NewSQLErrorf(sqldb.ER_MALFORMED_PACKET, "pkt.read.seq[%v]!=pkt.actual.seq[%v]", pkt.SequenceID, p.seq)
 	}
 	p.seq++
 	return pkt.Datas, nil
@@ -177,13 +177,17 @@ func (p *Packets) ReadEOF() error {
 	case proto.ERR_PACKET:
 		return p.ParseERR(data)
 	default:
-		return sqldb.NewSQLError(sqldb.ER_MALFORMED_PACKET, "unexpected.eof.packet[%+v]", data)
+		return sqldb.NewSQLErrorf(sqldb.ER_MALFORMED_PACKET, "unexpected.eof.packet[%+v]", data)
 	}
 }
 
 // AppendEOF appends EOF packet to the stream buffer.
-func (p *Packets) AppendEOF() error {
-	return p.Append([]byte{proto.EOF_PACKET})
+func (p *Packets) AppendEOF(flags uint16, warnings uint16) error {
+	eof := &proto.EOF{
+		StatusFlags: flags,
+		Warnings:    warnings,
+	}
+	return p.Append(proto.PackEOF(eof))
 }
 
 // AppendOKWithEOFHeader appends OK packet to the stream buffer with EOF header.
