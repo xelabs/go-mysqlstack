@@ -16,34 +16,27 @@ limitations under the License.
 
 package sqlparser
 
-import (
-	"strings"
-	"testing"
-)
+import "strings"
+import "testing"
 
-func TestKill(t *testing.T) {
+func TestChecksumTable(t *testing.T) {
 	validSQL := []struct {
 		input  string
 		output string
 	}{
 		{
-			input:  "kill 1",
-			output: "kill 1",
+			input:  "checksum table test.t1",
+			output: "checksum table test.t1",
 		},
 
 		{
-			input:  "kill 10000000000000000000000000000000",
-			output: "kill 10000000000000000000000000000000",
-		},
-
-		{
-			input:  "kill query 1",
-			output: "kill 1",
+			input:  "checksum table t1",
+			output: "checksum table t1",
 		},
 	}
 
-	for _, exp := range validSQL {
-		sql := strings.TrimSpace(exp.input)
+	for _, s := range validSQL {
+		sql := strings.TrimSpace(s.input)
 		tree, err := Parse(sql)
 		if err != nil {
 			t.Errorf("input: %s, err: %v", sql, err)
@@ -55,13 +48,9 @@ func TestKill(t *testing.T) {
 			return true, nil
 		}, tree)
 
-		node := tree.(*Kill)
-		node.QueryID.AsUint64()
-
-		// Format.
-		got := String(node)
-		if exp.output != got {
-			t.Errorf("want:\n%s\ngot:\n%s", exp.output, got)
+		got := String(tree.(*Checksum))
+		if s.output != got {
+			t.Errorf("want:\n%s\ngot:\n%s", s.output, got)
 		}
 	}
 }

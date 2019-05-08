@@ -103,7 +103,9 @@ func forceEOF(yylex interface{}) {
 %token LEX_ERROR
 %left <bytes> UNION
 %token <bytes> SELECT INSERT UPDATE DELETE FROM WHERE GROUP HAVING ORDER BY LIMIT OFFSET FOR
-%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE KEY DEFAULT SET LOCK FULL
+%token <bytes> ALL DISTINCT AS EXISTS ASC DESC INTO DUPLICATE KEY DEFAULT SET LOCK FULL CHECKSUM
+// FULLTEXT.
+%token <bytes> FULLTEXT PARSER NGRAM
 %token <bytes> VALUES LAST_INSERT_ID
 %token <bytes> NEXT VALUE SHARE MODE
 %token <bytes> SQL_NO_CACHE SQL_CACHE
@@ -186,7 +188,7 @@ func forceEOF(yylex interface{}) {
 %type <statement> insert_statement update_statement delete_statement set_statement
 %type <statement> create_statement alter_statement drop_statement
 %type <ddl> create_table_prefix
-%type <statement> analyze_statement show_statement use_statement other_statement
+%type <statement> analyze_statement show_statement use_statement other_statement checksum_statement
 %type <bytes2> comment_opt comment_list
 %type <str> union_op insert_or_replace
 %type <str> distinct_opt straight_join_opt cache_opt match_option separator_opt binlog_from_opt
@@ -294,6 +296,7 @@ command:
 | truncate_statement
 | analyze_statement
 | show_statement
+| checksum_statement
 | use_statement
 | xa_statement
 | explain_statement
@@ -864,6 +867,10 @@ index_definition:
   {
     $$ = &IndexDefinition{Info: $1, Columns: $3}
   }
+  | index_info '(' index_column_list ')' WITH PARSER NGRAM
+  {
+    $$ = &IndexDefinition{Info: $1, Columns: $3}
+  }
 
 index_info:
   PRIMARY KEY
@@ -872,16 +879,21 @@ index_info:
   }
 | UNIQUE index_or_key ID
   {
-    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Unique: true}
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Primary: false, Unique: true}
   }
 | UNIQUE ID
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: true}
+    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Primary:false, Unique: true}
   }
 | index_or_key ID
   {
-    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Unique: false}
+    $$ = &IndexInfo{Type: string($1), Name: NewColIdent(string($2)), Primary: false, Unique: false}
   }
+| FULLTEXT index_or_key ID
+  {
+    $$ = &IndexInfo{Type: string($1) + " " + string($2), Name: NewColIdent(string($3)), Primary: false, Unique: false, Fulltext: true}
+  }
+
 
 index_or_key:
     INDEX
@@ -998,6 +1010,10 @@ kill_statement:
   {
     $$ = &Kill{ QueryID: &NumVal{raw: string($2)}}
   }
+| KILL QUERY INTEGRAL force_eof
+  {
+    $$ = &Kill{ QueryID: &NumVal{raw: string($3)}}
+  }
 
 transaction_statement:
   BEGIN force_eof
@@ -1098,6 +1114,12 @@ database_from_opt:
 | FROM table_name
   {
     $$ = $2
+  }
+
+checksum_statement:
+  CHECKSUM TABLE table_name force_eof
+  {
+    $$ = &Checksum{ Table: $3}
   }
 
 use_statement:
@@ -2440,6 +2462,7 @@ reserved_keyword:
 | CHARACTER
 | CHARSET
 | COLLATE
+| COLUMNS
 | CONVERT
 | CREATE
 | CROSS
@@ -2509,7 +2532,6 @@ reserved_keyword:
 | STRAIGHT_JOIN
 | TABLE
 | TABLES
-| COLUMNS 
 | THEN
 | TO
 | TRUE
@@ -2551,6 +2573,7 @@ non_reserved_keyword:
 | ENGINE
 | EXPANSION
 | FLOAT_TYPE
+| FULLTEXT
 | GLOBAL
 | INT
 | INTEGER

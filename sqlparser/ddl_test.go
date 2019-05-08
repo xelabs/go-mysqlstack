@@ -123,6 +123,7 @@ func TestDDL1(t *testing.T) {
 				"	`name` varchar(10)\n" +
 				") engine=tokudb default charset=utf8",
 		},
+
 		// current timestamp.
 		{
 			input: "create table t (\n" +
@@ -134,6 +135,34 @@ func TestDDL1(t *testing.T) {
 				"	`id` int primary key,\n" +
 				"	`t1` timestamp default current_timestamp,\n" +
 				"	`t2` timestamp not null default current_timestamp on update current_timestamp comment 'currenttimestamp'\n" +
+				")",
+		},
+
+		// Fulltext.
+		{
+			input: "create table t (\n" +
+				"	id INT PRIMARY KEY,\n" +
+				"	title VARCHAR(200),\n" +
+				"   FULLTEXT INDEX ngram_idx(title,body) WITH PARSER ngram\n" +
+				")",
+			output: "create table t (\n" +
+				"	`id` int primary key,\n" +
+				"	`title` varchar(200),\n" +
+				"	fulltext index `ngram_idx` (`title`, `body`) WITH PARSER ngram\n" +
+				")",
+		},
+
+		// Fulltext.
+		{
+			input: "create table t (\n" +
+				"	id INT PRIMARY KEY,\n" +
+				"	title VARCHAR(200),\n" +
+				"   FULLTEXT KEY ngram_idx(title,body) /*!50100 WITH PARSER `ngram` */ \n" +
+				")",
+			output: "create table t (\n" +
+				"	`id` int primary key,\n" +
+				"	`title` varchar(200),\n" +
+				"	fulltext key `ngram_idx` (`title`, `body`) WITH PARSER ngram\n" +
 				")",
 		},
 
