@@ -19,16 +19,16 @@ import (
 
 	"github.com/xelabs/go-mysqlstack/proto"
 	"github.com/xelabs/go-mysqlstack/sqldb"
-	"github.com/xelabs/go-mysqlstack/xlog"
-
 	"github.com/xelabs/go-mysqlstack/sqlparser/depends/common"
 	querypb "github.com/xelabs/go-mysqlstack/sqlparser/depends/query"
 	"github.com/xelabs/go-mysqlstack/sqlparser/depends/sqltypes"
+	"github.com/xelabs/go-mysqlstack/xlog"
 )
 
 // Handler interface.
 type Handler interface {
 	ServerVersion() string
+	SetServerVersion()
 	NewSession(session *Session)
 	SessionInc(session *Session)
 	SessionDec(session *Session)
@@ -54,8 +54,6 @@ type Listener struct {
 
 	// Incrementing ID for connection id.
 	connectionID uint32
-
-	serverVersion string
 }
 
 // NewListener creates a new Listener.
@@ -66,12 +64,11 @@ func NewListener(log *xlog.Log, address string, handler Handler) (*Listener, err
 	}
 
 	return &Listener{
-		log:           log,
-		address:       address,
-		handler:       handler,
-		listener:      listener,
-		connectionID:  1,
-		serverVersion: handler.ServerVersion(),
+		log:          log,
+		address:      address,
+		handler:      handler,
+		listener:     listener,
+		connectionID: 1,
 	}, nil
 }
 
@@ -86,7 +83,7 @@ func (l *Listener) Accept() {
 		}
 		ID := l.connectionID
 		l.connectionID++
-		go l.handle(conn, ID, l.serverVersion)
+		go l.handle(conn, ID)
 	}
 }
 
@@ -123,16 +120,21 @@ func (l *Listener) parserComStatementExecute(data []byte, session *Session) (*St
 	if err != nil {
 		return nil, err
 	}
-	protoStmt, err := proto.UnPackStatementExecute(data[1:], stmt.ParamCount, sqltypes.ParseMySQLValues)
-	if err != nil {
+
+	protoStmt := &proto.Statement{
+		ID:         stmt.ID,
+		ParamCount: stmt.ParamCount,
+		ParamsType: stmt.ParamsType,
+		BindVars:   stmt.BindVars,
+	}
+	if err = proto.UnPackStatementExecute(data[1:], protoStmt, sqltypes.ParseMySQLValues); err != nil {
 		return nil, err
 	}
-	stmt.BindVars = protoStmt.BindVars
 	return stmt, nil
 }
 
 // handle is called in a go routine for each client connection.
-func (l *Listener) handle(conn net.Conn, ID uint32, serverVersion string) {
+func (l *Listener) handle(conn net.Conn, ID uint32) {
 	var err error
 	var data []byte
 	var authPkt []byte
@@ -146,7 +148,11 @@ func (l *Listener) handle(conn net.Conn, ID uint32, serverVersion string) {
 			log.Error("server.handle.panic:\n%v\n%s", x, debug.Stack())
 		}
 	}()
-	session := newSession(log, ID, l.serverVersion, conn)
+
+	// set server version if backend MySQL version is different.
+	l.handler.SetServerVersion()
+
+	session := newSession(log, ID, l.handler.ServerVersion(), conn)
 	// Session check.
 	if err = l.handler.SessionCheck(session); err != nil {
 		log.Warning("session[%v].check.failed.error:%+v", ID, err)
@@ -252,6 +258,7 @@ func (l *Listener) handle(conn net.Conn, ID uint32, serverVersion string) {
 				ID:          id,
 				PrepareStmt: query,
 				ParamCount:  paramCount,
+				ParamsType:  make([]int32, paramCount),
 				BindVars:    make(map[string]*querypb.BindVariable, paramCount),
 			}
 			for i := uint16(0); i < paramCount; i++ {
@@ -274,6 +281,7 @@ func (l *Listener) handle(conn net.Conn, ID uint32, serverVersion string) {
 					return
 				}
 			}
+
 			if err = l.handler.ComQuery(session, stmt.PrepareStmt, sqltypes.CopyBindVariables(stmt.BindVars), func(qr *sqltypes.Result) error {
 				return session.writeBinaryRows(qr)
 			}); err != nil {

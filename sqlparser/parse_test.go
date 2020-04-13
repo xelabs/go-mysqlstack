@@ -16,14 +16,31 @@ limitations under the License.
 
 package sqlparser
 
-import "strings"
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValid(t *testing.T) {
 	validSQL := []struct {
 		input  string
 		output string
 	}{{
+		input:  "select /*non_reserved_keyword*/ `status` from t",
+		output: "select /*non_reserved_keyword*/ `status` from t",
+	}, {
+		input:  "select /*non_reserved_keyword*/ status from t",
+		output: "select /*non_reserved_keyword*/ `status` from t",
+	}, {
+		input:  "select /*non_reserved_keyword*/ bool from t",
+		output: "select /*non_reserved_keyword*/ `bool` from t",
+	}, {
+		input:  "select /*non_reserved_keyword*/ datetime from t",
+		output: "select /*non_reserved_keyword*/ `datetime` from t",
+	}, {
+		input:  "select /*non_reserved_keyword*/ enum from t",
+		output: "select /*non_reserved_keyword*/ `enum` from t",
+	}, {
 		input:  "select 1",
 		output: "select 1 from dual",
 	}, {
@@ -496,6 +513,8 @@ func TestValid(t *testing.T) {
 	}, {
 		input: "select /* interval */ adddate('2008-01-02', interval 31 day) from t",
 	}, {
+		input: "select /* interval keyword */ adddate('2008-01-02', interval 1 year) from t",
+	}, {
 		input: "select /* dual */ 1 from dual",
 	}, {
 		input:  "select /* Dual */ 1 from Dual",
@@ -638,8 +657,8 @@ func TestValid(t *testing.T) {
 		input:  "create table if not exists a (\n\t`a` int\n)",
 		output: "create table if not exists a (\n\t`a` int\n)",
 	}, {
-		input:  "create index a on b",
-		output: "create index a on b",
+		input:  "create index a on b(c)",
+		output: "create index a on b(`c`)",
 	}, {
 		input:  "drop table a",
 		output: "drop table a",
@@ -780,8 +799,8 @@ func TestCaseSensitivity(t *testing.T) {
 	}{{
 		input: "create table A (\n\t`B` int\n)",
 	}, {
-		input:  "create index b on A",
-		output: "create index b on A",
+		input:  "create index b on A(B)",
+		output: "create index b on A(`B`)",
 	}, {
 		input:  "alter table A foo",
 		output: "alter table A",
@@ -1107,14 +1126,6 @@ func TestCreateTable(t *testing.T) {
 			"	`s1` varchar default 'c',\n" +
 			"	`s2` varchar default 'this is a string',\n" +
 			"	`s3` varchar default null\n" +
-			")",
-
-		// test key field options
-		"create table t (\n" +
-			"	`id` int auto_increment primary key,\n" +
-			"	`username` varchar unique key,\n" +
-			"	`email` varchar unique,\n" +
-			"	`full_name` varchar key\n" +
 			")",
 
 		// test defining indexes separately
