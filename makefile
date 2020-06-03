@@ -5,7 +5,6 @@ fmt:
 	go vet ./...
 
 test:
-	go get github.com/shopspring/decimal
 	go get github.com/stretchr/testify/assert
 	@echo "--> Testing..."
 	@$(MAKE) testxlog

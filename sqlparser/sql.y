@@ -48,70 +48,71 @@ func forceEOF(yylex interface{}) {
 %}
 
 %union {
-  empty         struct{}
-  statement     Statement
-  selStmt       SelectStatement
-  ddl           *DDL
-  ins           *Insert
-  byt           byte
-  bytes         []byte
-  bytes2        [][]byte
-  str           string
-  strs          []string
-  selectExprs   SelectExprs
-  selectExpr    SelectExpr
-  columns       Columns
-  colName       *ColName
-  tableExprs    TableExprs
-  tableExpr     TableExpr
-  tableName     TableName
-  tableNames    TableNames
-  indexHints    *IndexHints
-  expr          Expr
-  exprs         Exprs
-  boolVal       BoolVal
-  colTuple      ColTuple
-  values        Values
-  valTuple      ValTuple
-  subquery      *Subquery
-  whens         []*When
-  when          *When
-  orderBy       OrderBy
-  order         *Order
-  limit         *Limit
-  updateExprs   UpdateExprs
-  updateExpr    *UpdateExpr
-  setExprs      SetExprs
-  setExpr       *SetExpr
-  colIdent      ColIdent
-  colIdents     []ColIdent
-  tableIdent    TableIdent
-  convertType   *ConvertType
-  aliasedTableName *AliasedTableExpr
-  TableSpec  *TableSpec
-  TableOptionListOpt TableOptionListOpt
-  TableOptionList    TableOptionList
-  tableOption        *TableOption
-  columnType    ColumnType
-  colPrimaryKeyOpt   ColumnPrimaryKeyOption
-  colUniqueKeyOpt    ColumnUniqueKeyOption
-  optVal        *SQLVal
-  LengthScaleOption LengthScaleOption
-  columnDefinition *ColumnDefinition
-  indexDefinition *IndexDefinition
-  indexColumn   *IndexColumn
-  indexColumns  []*IndexColumn
-  indexOptionList IndexOptionList
-  indexOption *IndexOption
-  columnOptionListOpt ColumnOptionListOpt
-  columnOptionList  ColumnOptionList
-  columnOption      *ColumnOption
-  databaseOptionListOpt DatabaseOptionListOpt
-  databaseOptionList  DatabaseOptionList
-  databaseOption      *DatabaseOption
-  partitionDefinition *PartitionDefinition
-  partitionDefinitions []*PartitionDefinition
-  showFilter    *ShowFilter
+	empty                 struct{}
+	statement             Statement
+	selStmt               SelectStatement
+	ddl                   *DDL
+	ins                   *Insert
+	byt                   byte
+	bytes                 []byte
+	bytes2                [][]byte
+	str                   string
+	strs                  []string
+	selectExprs           SelectExprs
+	selectExpr            SelectExpr
+	columns               Columns
+	colName               *ColName
+	tableExprs            TableExprs
+	tableExpr             TableExpr
+	tableName             TableName
+	tableNames            TableNames
+	indexHints            *IndexHints
+	expr                  Expr
+	exprs                 Exprs
+	boolVal               BoolVal
+	colTuple              ColTuple
+	values                Values
+	valTuple              ValTuple
+	subquery              *Subquery
+	whens                 []*When
+	when                  *When
+	orderBy               OrderBy
+	order                 *Order
+	limit                 *Limit
+	updateExprs           UpdateExprs
+	updateExpr            *UpdateExpr
+	setExprs              SetExprs
+	setExpr               *SetExpr
+	setVal                SetVal
+	colIdent              ColIdent
+	colIdents             []ColIdent
+	tableIdent            TableIdent
+	convertType           *ConvertType
+	aliasedTableName      *AliasedTableExpr
+	tableSpec             *TableSpec
+	tableOptionListOpt    TableOptionListOpt
+	tableOptionList       []*TableOption
+	tableOption           *TableOption
+	columnType            ColumnType
+	colPrimaryKeyOpt      ColumnPrimaryKeyOption
+	colUniqueKeyOpt       ColumnUniqueKeyOption
+	optVal                *SQLVal
+	lengthScaleOption     LengthScaleOption
+	columnDefinition      *ColumnDefinition
+	indexDefinition       *IndexDefinition
+	indexColumn           *IndexColumn
+	indexColumns          []*IndexColumn
+	indexOptionList       []*IndexOption
+	indexOption           *IndexOption
+	columnOptionListOpt   ColumnOptionListOpt
+	columnOptionList      []*ColumnOption
+	columnOption          *ColumnOption
+	databaseOptionListOpt DatabaseOptionListOpt
+	databaseOptionList    []*DatabaseOption
+	databaseOption        *DatabaseOption
+	partitionDefinition   *PartitionDefinition
+	partitionDefinitions  []*PartitionDefinition
+	showFilter            *ShowFilter
 }
 
 %token LEX_ERROR
@@ -385,6 +386,15 @@ func forceEOF(yylex interface{}) {
 	JSON
 	ENUM
 
+%token <bytes>
+	GEOMETRY
+	POINT
+	LINESTRING
+	POLYGON
+	GEOMETRYCOLLECTION
+	MULTIPOINT
+	MULTILINESTRING
+	MULTIPOLYGON
 
 // Type Modifiers
 %token	<bytes>
@@ -394,7 +404,43 @@ func forceEOF(yylex interface{}) {
 	SIGNED
 	UNSIGNED
 	ZEROFILL
+    FIXED
+    DYNAMIC
+    STORAGE
+    DISK
+    MEMORY
+    COLUMN_FORMAT
+    AVG_ROW_LENGTH
+    COMPRESSION
+    CONNECTION
+    DATA
+    DIRECTORY
+    DELAY_KEY_WRITE
+    ENCRYPTION
+    INSERT_METHOD
+    MAX_ROWS
+    MIN_ROWS
+    PACK_KEYS
+    PASSWORD
+    ROW_FORMAT
+    STATS_AUTO_RECALC
+    STATS_PERSISTENT
+    STATS_SAMPLE_PAGES
+    TABLESPACE
 
+// ROW_FORMAT options
+%token	<bytes>
+    COMPRESSED
+    REDUNDANT
+    COMPACT
+    TOKUDB_DEFAULT
+    TOKUDB_FAST
+    TOKUDB_SMALL
+    TOKUDB_ZLIB
+    TOKUDB_QUICKLZ
+    TOKUDB_LZMA
+    TOKUDB_SNAPPY
+    TOKUDB_UNCOMPRESSED
 
 // Supported SHOW tokens
 %token	<bytes>
@@ -494,8 +540,18 @@ func forceEOF(yylex interface{}) {
 // SET tokens
 %token	<bytes>
 	GLOBAL
+	LOCAL
 	SESSION
 	NAMES
+	ISOLATION
+	LEVEL
+	READ
+	WRITE
+	ONLY
+	REPEATABLE
+	COMMITTED
+	UNCOMMITTED
+	SERIALIZABLE
 
 
 // Radon Tokens
@@ -544,6 +600,8 @@ func forceEOF(yylex interface{}) {
 %type	<str>
 	union_op
 	insert_or_replace
+	now_sym_with_frac_opt
+	on_update_opt
 
 %type	<str>
 	distinct_opt
@@ -701,15 +759,28 @@ func forceEOF(yylex interface{}) {
 
 %type	<setExprs>
 	set_list
+	txn_list
 
 %type	<setExpr>
+	set_opt_vals
 	set_expression
+
+%type	<setVal>
+	set_txn_vals
+
+%type	<str>
+	access_mode
+	access_mode_opt
+	isolation_level
+	isolation_level_opt
+	isolation_types
 
 %type	<expr>
 	charset_value
 
 %type	<bytes>
 	charset_or_character_set
+	now_sym
 
 %type	<bytes>
 	for_from
@@ -769,22 +840,46 @@ func forceEOF(yylex interface{}) {
 	numeric_type
 	time_type
 	char_type
+	spatial_type
 
+// table options
 %type	<optVal>
 	length_opt
 	column_default_opt
-	on_update_opt
 	column_comment_opt
-	table_comment_opt
-	engine_option
-	charset_option
-	tabletype_option
-	auto_opt
+	col_collate_opt
+	table_engine_option
 	parts_num_opt
+	table_charset_option
+	table_type_option
+	table_auto_opt
+	table_comment_opt
+	table_avg_row_length_opt
+	table_checksum_opt
+	table_collate_opt
+	table_compression_opt
+	table_connection_opt
+	table_data_directory_opt
+	table_index_directory_opt
+	table_delay_key_write_opt
+	table_encryption_opt
+	table_insert_method_opt
+	table_key_block_size_opt
+	table_max_rows_opt
+	table_min_rows_opt
+	table_pack_keys_opt
+	table_password_opt
+	table_row_format_opt
+	table_stats_auto_recalc_opt
+	table_stats_persistent_opt
+	table_stats_sample_pages_opt
+	table_tablespace_opt
 
 %type	<str>
 	charset_opt
 	collate_opt
+	column_format_opt
+	storage_opt
 
 %type	<optVal>
 	id_or_string
@@ -799,7 +894,7 @@ func forceEOF(yylex interface{}) {
 	unsigned_opt
 	zero_fill_opt
 
-%type	<LengthScaleOption>
+%type	<lengthScaleOption>
 	float_length_opt
 	decimal_length_opt
 
@@ -825,14 +920,14 @@ func forceEOF(yylex interface{}) {
 %type	<str>
 	index_or_key
 
-%type	<TableSpec>
+%type	<tableSpec>
 	table_spec
 	table_column_list
 
-%type	<TableOptionListOpt>
+%type	<tableOptionListOpt>
 	table_option_list_opt
 
-%type	<TableOptionList>
+%type	<tableOptionList>
 	table_option_list
 
 %type	<tableOption>
@@ -1022,19 +1117,9 @@ set_statement:
 	{
 		$$ = &Set{Comments: Comments($2), Exprs: $3}
 	}
-|	SET comment_opt set_session_or_global set_list
+|	SET comment_opt txn_list
 	{
-		$$ = &Set{Comments: Comments($2), Exprs: $4}
-	}
-
-set_session_or_global:
-	SESSION
-	{
-		$$ = SessionStr
-	}
-|	GLOBAL
-	{
-		$$ = GlobalStr
+		$$ = &Set{Comments: Comments($2), Exprs: $3}
 	}
 
 partition_definitions:
@@ -1361,6 +1446,66 @@ table_spec:
 			if val := $4.GetTableOptValByType(TableOptionTableType); val != nil {
 				$$.Options.Type = String(val)
 			}
+			if val := $4.GetTableOptValByType(TableOptionAvgRowLength); val != nil {
+				$$.Options.AvgRowLength = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionChecksum); val != nil {
+				$$.Options.Checksum = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionCollate); val != nil {
+				$$.Options.Collate = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionCompression); val != nil {
+				$$.Options.Compression = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionConnection); val != nil {
+				$$.Options.Connection = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionDataDirectory); val != nil {
+				$$.Options.DataDirectory = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionIndexDirectory); val != nil {
+				$$.Options.IndexDirectory = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionDelayKeyWrite); val != nil {
+				$$.Options.DelayKeyWrite = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionEncryption); val != nil {
+				$$.Options.Encryption = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionInsertMethod); val != nil {
+				$$.Options.InsertMethod = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionKeyBlockSize); val != nil {
+				$$.Options.KeyBlockSize= String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionMaxRows); val != nil {
+				$$.Options.MaxRows= String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionMinRows); val != nil {
+				$$.Options.MinRows = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionPackKeys); val != nil {
+				$$.Options.PackKeys = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionPassword); val != nil {
+				$$.Options.Password = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionRowFormat); val != nil {
+				$$.Options.RowFormat = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionStatsAutoRecalc); val != nil {
+				$$.Options.StatsAutoRecalc = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionStatsPersistent); val != nil {
+				$$.Options.StatsPersistent = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionStatsSamplePages); val != nil {
+				$$.Options.StatsSamplePages = String(val)
+			}
+			if val := $4.GetTableOptValByType(TableOptionTableSpace); val != nil {
+				$$.Options.TableSpace = String(val)
+			}
 		}
 		if $$.Options.Type == "" {
 			$$.Options.Type = NormalTableType
@@ -1394,43 +1539,402 @@ table_option:
 			Val:  $1,
 		}
 	}
-|	engine_option
+|	table_engine_option
 	{
 		$$ = &TableOption{
 			Type: TableOptionEngine,
 			Val:  $1,
 		}
 	}
-|	charset_option
+|	table_charset_option
 	{
 		$$ = &TableOption{
 			Type: TableOptionCharset,
 			Val:  $1,
 		}
 	}
-|	tabletype_option
+|	table_type_option
 	{
 		$$ = &TableOption{
 			Type: TableOptionTableType,
 			Val:  $1,
 		}
 	}
-|	auto_opt
+|	table_auto_opt
 	{
 		$$ = &TableOption{
 			Type: TableOptionAutoInc,
 			Val:  $1,
 		}
 	}
+|   table_avg_row_length_opt
+	{
+		$$ = &TableOption{
+			Type: TableOptionAvgRowLength,
+			Val:  $1,
+		}
+	}
+|   table_checksum_opt
+	{
+		$$ = &TableOption{
+			Type: TableOptionChecksum,
+			Val:  $1,
+		}
+	}
+|   table_collate_opt	
+	{
+		$$ = &TableOption{
+			Type: TableOptionCollate,
+			Val:  $1,
+		}
+    }
+|   table_compression_opt
+	{
+		$$ = &TableOption{
+			Type: TableOptionCompression,
+			Val:  $1,
+		}
+    }
+|   table_connection_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionConnection,
+			Val:  $1,
+		}
+    }
+|   table_data_directory_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionDataDirectory,
+			Val:  $1,
+		}
+    }
+|   table_index_directory_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionIndexDirectory,
+			Val:  $1,
+		}
+    }
+|   table_delay_key_write_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionDelayKeyWrite,
+			Val:  $1,
+		}
+    }
+|   table_encryption_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionEncryption,
+			Val:  $1,
+		}
+    }
+|   table_insert_method_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionInsertMethod,
+			Val:  $1,
+		}
+    }
+|   table_key_block_size_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionKeyBlockSize,
+			Val:  $1,
+		}
+    }
+|   table_max_rows_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionMaxRows,
+			Val:  $1,
+		}
+    }
+|   table_min_rows_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionMinRows,
+			Val:  $1,
+		}
+    }
+|   table_pack_keys_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionPackKeys,
+			Val:  $1,
+		}
+    }
+|   table_password_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionPassword,
+			Val:  $1,
+		}
+    }
+|   table_row_format_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionRowFormat,
+			Val:  $1,
+		}
+    }
+|   table_stats_auto_recalc_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionStatsAutoRecalc,
+			Val:  $1,
+		}
+    }
+|   table_stats_persistent_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionStatsPersistent,
+			Val:  $1,
+		}
+    }
+|   table_stats_sample_pages_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionStatsSamplePages,
+			Val:  $1,
+		}
+    }
+|   table_tablespace_opt
+    {
+		$$ = &TableOption{
+			Type: TableOptionTableSpace,
+			Val:  $1,
+		}
+    }
 
-auto_opt:
+table_auto_opt:
 	AUTO_INCREMENT opt_equal INTEGRAL
 	{}
+
+table_avg_row_length_opt:
+	AVG_ROW_LENGTH opt_equal INTEGRAL
+	{
+        $$ = NewIntVal($3)
+    }
+
+table_collate_opt:
+	opt_default COLLATE opt_equal id_or_string
+	{
+		$$ = $4
+	}
+
+table_compression_opt:
+	COMPRESSION opt_equal STRING
+	{
+        switch StrToLower(string($3)) {
+        case "zlib", "lz4", "none":
+            break
+        default:
+            yylex.Error("Invalid compression option, argument (should be 'ZLIB', 'LZ4' or 'NONE')")
+            return 1
+        }
+		$$ = NewStrVal($3)
+	}
+
+table_connection_opt:
+	CONNECTION opt_equal STRING
+	{
+		$$ = NewStrVal($3)
+	}
+
+table_data_directory_opt:
+	DATA DIRECTORY opt_equal STRING
+	{
+		$$ = NewStrVal($4)
+	}
+
+table_index_directory_opt:
+	INDEX DIRECTORY opt_equal STRING
+	{
+		$$ = NewStrVal($4)
+	}
+
+table_delay_key_write_opt:
+	DELAY_KEY_WRITE opt_equal INTEGRAL
+	{
+		$$ = NewIntVal($3)
+	}
+
+table_encryption_opt:
+	ENCRYPTION opt_equal STRING
+	{
+        switch string($3) {
+        case "Y", "y":
+            yylex.Error("The encryption option is parsed but ignored by all storage engines.")
+            return 1
+        case "N", "n":
+            break
+        default:
+            yylex.Error("Invalid encryption option, argument (should be Y or N)")
+            return 1
+        }
+		$$ = NewStrVal($3)
+	}
+
+table_insert_method_opt:
+	INSERT_METHOD opt_equal ID
+	{
+        switch StrToLower(string($3)) {
+        case "no", "first", "last":
+            break
+        default:
+            yylex.Error("Invalid insert_method option, argument (should be NO, FIRST or LAST)")
+            return 1
+        }
+		$$ = NewStrValWithoutQuote($3)
+	}
+
+table_key_block_size_opt:
+	KEY_BLOCK_SIZE opt_equal INTEGRAL
+	{
+		$$ = NewIntVal($3)
+	}
+
+table_max_rows_opt:
+	MAX_ROWS opt_equal INTEGRAL
+	{
+		$$ = NewIntVal($3)
+	}
+
+table_min_rows_opt:
+	MIN_ROWS opt_equal INTEGRAL
+	{
+		$$ = NewIntVal($3)
+	}
+
+table_pack_keys_opt:
+	PACK_KEYS opt_equal INTEGRAL
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   PACK_KEYS opt_equal DEFAULT
+    {
+		$$ = NewStrValWithoutQuote($3)
+    }
+
+table_password_opt:
+	PASSWORD opt_equal STRING
+	{
+		$$ = NewStrVal($3)
+	}
+
+// In the newest version of 5.7, formats with tokudb are abandoned, but we reserve them in RadonDB.
+// see: https://github.com/mysql/mysql-server/blob/5.7/sql/sql_yacc.yy#L6211
+table_row_format_opt:
+	ROW_FORMAT opt_equal DEFAULT
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal DYNAMIC
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal FIXED
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal COMPRESSED
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal REDUNDANT
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal COMPACT
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_DEFAULT
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_FAST
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_SMALL
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_ZLIB
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_QUICKLZ
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_LZMA
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_SNAPPY
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   ROW_FORMAT opt_equal TOKUDB_UNCOMPRESSED
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+
+table_stats_auto_recalc_opt:
+	STATS_AUTO_RECALC opt_equal INTEGRAL
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   STATS_AUTO_RECALC opt_equal DEFAULT
+    {
+		$$ = NewStrValWithoutQuote($3)
+    }
+
+table_stats_persistent_opt:
+	STATS_PERSISTENT opt_equal INTEGRAL
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   STATS_PERSISTENT opt_equal DEFAULT
+    {
+		$$ = NewStrValWithoutQuote($3)
+    }
+
+// In MySQL, STATS_SAMPLE_PAGES=N(Where 0<N<=65535) or STAS_SAMPLE_PAGES=DEFAULT.
+table_stats_sample_pages_opt:
+	STATS_SAMPLE_PAGES opt_equal INTEGRAL
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   STATS_SAMPLE_PAGES opt_equal DEFAULT
+    {
+		$$ = NewStrValWithoutQuote($3)
+    }
+
+table_tablespace_opt:
+	TABLESPACE opt_equal ID
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+|   TABLESPACE opt_equal non_reserved_keyword
+	{
+		$$ = NewStrValWithoutQuote($3)
+	}
+
+table_checksum_opt:
+	CHECKSUM opt_equal INTEGRAL
+	{
+        $$ = NewIntVal($3)
+    }
 
 id_or_string:
 	ID
 	{
-		// Normal str as a identify, without quote
+		// Normal str as an identify, without quote
 		$$ = NewStrValWithoutQuote($1)
 	}
 |	STRING
@@ -1445,19 +1949,19 @@ table_comment_opt:
 		$$ = NewStrVal($3)
 	}
 
-engine_option:
+table_engine_option:
 	ENGINE opt_equal id_or_string
 	{
 		$$ = $3
 	}
 
-charset_option:
+table_charset_option:
 	opt_default opt_charset opt_equal id_or_string
 	{
 		$$ = $4
 	}
 
-tabletype_option:
+table_type_option:
 	GLOBAL
 	{
 		$$ = NewStrValWithoutQuote([]byte(GlobalTableType))
@@ -1492,6 +1996,9 @@ column_definition:
 		$2.OnUpdate = $3.GetColumnOption(ColumnOptionOnUpdate).OnUpdate
 		$2.PrimaryKeyOpt = $3.GetColumnOption(ColumnOptionKeyPrimaryOpt).PrimaryKeyOpt
 		$2.UniqueKeyOpt = $3.GetColumnOption(ColumnOptionKeyUniqueOpt).UniqueKeyOpt
+		$2.Collate = $3.GetColumnOption(ColumnOptionCollate).Collate
+		$2.ColumnFormat = $3.GetColumnOption(ColumnOptionFormat).ColumnFormat
+		$2.Storage = $3.GetColumnOption(ColumnOptionStorage).Storage
 		$$ = &ColumnDefinition{Name: $1, Type: $2}
 	}
 
@@ -1514,6 +2021,7 @@ column_type:
 	}
 |	char_type
 |	time_type
+|	spatial_type
 
 column_option_list_opt:
 	{
@@ -1584,6 +2092,27 @@ column_option:
 			OnUpdate: $1,
 		}
 	}
+|   col_collate_opt
+	{
+		$$ = &ColumnOption{
+			typ:      ColumnOptionCollate,
+			Collate: $1,
+		}
+	}
+|   column_format_opt
+	{
+		$$ = &ColumnOption{
+			typ:      ColumnOptionFormat,
+			ColumnFormat: $1,
+		}
+	}
+|   storage_opt
+	{
+		$$ = &ColumnOption{
+			typ:      ColumnOptionStorage,
+			Storage: $1,
+		}
+    }
 
 numeric_type:
 	int_type length_opt
@@ -1598,6 +2127,14 @@ numeric_type:
 
 int_type:
 	BIT
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	BOOL
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	BOOLEAN
 	{
 		$$ = ColumnType{Type: string($1)}
 	}
@@ -1681,13 +2218,13 @@ time_type:
 	}
 
 char_type:
-	CHAR length_opt charset_opt collate_opt
+	CHAR length_opt charset_opt
 	{
-		$$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+		$$ = ColumnType{Type: string($1), Length: $2, Charset: $3}
 	}
-|	VARCHAR length_opt charset_opt collate_opt
+|	VARCHAR length_opt charset_opt
 	{
-		$$ = ColumnType{Type: string($1), Length: $2, Charset: $3, Collate: $4}
+		$$ = ColumnType{Type: string($1), Length: $2, Charset: $3}
 	}
 |	BINARY length_opt
 	{
@@ -1697,21 +2234,21 @@ char_type:
 	{
 		$$ = ColumnType{Type: string($1), Length: $2}
 	}
-|	TEXT charset_opt collate_opt
+|	TEXT charset_opt
 	{
-		$$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+		$$ = ColumnType{Type: string($1), Charset: $2}
 	}
-|	TINYTEXT charset_opt collate_opt
+|	TINYTEXT charset_opt
 	{
-		$$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+		$$ = ColumnType{Type: string($1), Charset: $2}
 	}
-|	MEDIUMTEXT charset_opt collate_opt
+|	MEDIUMTEXT charset_opt
 	{
-		$$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+		$$ = ColumnType{Type: string($1), Charset: $2}
 	}
-|	LONGTEXT charset_opt collate_opt
+|	LONGTEXT charset_opt
 	{
-		$$ = ColumnType{Type: string($1), Charset: $2, Collate: $3}
+		$$ = ColumnType{Type: string($1), Charset: $2}
 	}
 |	BLOB
 	{
@@ -1736,6 +2273,40 @@ char_type:
 |	ENUM '(' enum_values ')'
 	{
 		$$ = ColumnType{Type: string($1), EnumValues: $3}
+	}
+
+spatial_type:
+	GEOMETRY
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	POINT
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	LINESTRING
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	POLYGON
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	GEOMETRYCOLLECTION
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	MULTIPOINT
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	MULTILINESTRING
+	{
+		$$ = ColumnType{Type: string($1)}
+	}
+|	MULTIPOLYGON
+	{
+		$$ = ColumnType{Type: string($1)}
 	}
 
 enum_values:
@@ -1840,10 +2411,41 @@ column_default_opt:
 	}
 
 on_update_opt:
-	ON UPDATE CURRENT_TIMESTAMP
+	ON UPDATE now_sym_with_frac_opt
 	{
-		$$ = NewValArg($3)
+		$$ = $3
 	}
+
+now_sym_with_frac_opt:
+    now_sym
+    {
+        $$ = string($1)
+    }
+|   now_sym '(' ')'
+    {
+		$$ = string($1)+"("+")"
+    }
+|   now_sym '(' INTEGRAL ')'
+    {
+		$$ = string($1)+"("+string($3)+")"
+    }
+
+// See https://dev.mysql.com/doc/refman/5.7/en/date-and-time-functions.html#function_localtime
+// TODO: Process other three keywords, see function_call_nonkeyword, and we'll abandon function_call_nonkeyword in the future.
+now_sym:
+    CURRENT_TIMESTAMP
+    {
+		$$ = $1
+    }
+|   LOCALTIME
+    {
+		$$ = $1
+    }
+|   LOCALTIMESTAMP
+    {
+		$$ = $1
+    }
+
 
 auto_increment_opt:
 	AUTO_INCREMENT
@@ -1864,6 +2466,13 @@ charset_opt:
 		$$ = string($3)
 	}
 
+// TODO in the futrue we'll combine col_collate_opt and collate_opt into one.
+col_collate_opt:
+COLLATE id_or_string
+	{
+		$$ = $2
+	}
+
 collate_opt:
 	{
 		$$ = ""
@@ -1872,6 +2481,36 @@ collate_opt:
 	{
 		$$ = string($2)
 	}
+
+column_format_opt:
+COLUMN_FORMAT FIXED
+    {
+		$$ = string($2)
+    }
+|   COLUMN_FORMAT  DYNAMIC
+    {
+		$$ = string($2)
+    }
+|   COLUMN_FORMAT  DEFAULT
+    {
+		$$ = string($2)
+    }
+
+storage_opt:
+STORAGE DEFAULT
+    {
+        // "default" is not in official doc: https://dev.mysql.com/doc/refman/5.7/en/create-table.html
+        // but actually mysql support it, see: https://github.com/mysql/mysql-server/blob/5.7/sql/sql_yacc.yy#L6953
+		$$ = string($2)
+    }
+|   STORAGE DISK
+    {
+		$$ = string($2)
+    }
+|   STORAGE MEMORY
+    {
+		$$ = string($2)
+    }
 
 column_primary_key_opt:
 	PRIMARY KEY
@@ -3453,13 +4092,36 @@ set_list:
 	}
 
 set_expression:
-	reserved_sql_id '=' expression
+	set_opt_vals
 	{
-		$$ = &SetExpr{Name: $1, Expr: $3}
+		$$ = $1
 	}
-|	charset_or_character_set charset_value collate_opt
+|	set_session_or_global set_opt_vals
 	{
-		$$ = &SetExpr{Name: NewColIdent(string($1)), Expr: $2}
+		$2.Scope = $1
+		$$ = $2
+	}
+
+set_opt_vals:
+	reserved_sql_id '=' ON
+	{
+		$$ = &SetExpr{Type: $1, Val: &OptVal{Value: NewStrVal([]byte("on"))}}
+	}
+|	reserved_sql_id '=' OFF
+	{
+		$$ = &SetExpr{Type: $1, Val: &OptVal{Value: NewStrVal([]byte("off"))}}
+	}
+|	reserved_sql_id '=' expression
+	{
+		$$ = &SetExpr{Type: $1, Val: &OptVal{Value: $3}}
+	}
+|	charset_or_character_set charset_value
+	{
+		$$ = &SetExpr{Type: NewColIdent(string($1)), Val: &OptVal{Value: $2}}
+	}
+|	NAMES charset_value collate_opt
+	{
+		$$ = &SetExpr{Type: NewColIdent(string($1)), Val: &OptVal{Value: &CollateExpr{Expr: $2, Charset: $3}}}
 	}
 
 charset_or_character_set:
@@ -3468,7 +4130,6 @@ charset_or_character_set:
 	{
 		$$ = []byte("charset")
 	}
-|	NAMES
 
 charset_value:
 	sql_id
@@ -3482,6 +4143,94 @@ charset_value:
 |	DEFAULT
 	{
 		$$ = &Default{}
+	}
+
+txn_list:
+	TRANSACTION set_txn_vals
+	{
+		$$ = SetExprs{&SetExpr{Type: NewColIdent(string($1)), Val: $2}}
+	}
+|	set_session_or_global TRANSACTION set_txn_vals
+	{
+		$$ = SetExprs{&SetExpr{Scope: $1, Type: NewColIdent(string($2)), Val: $3}}
+	}
+
+set_txn_vals:
+	isolation_level access_mode_opt
+	{
+		$$ =  &TxnVal{Level: $1, Mode: $2}
+	}
+|	access_mode isolation_level_opt
+	{
+		$$ =  &TxnVal{Level: $2, Mode: $1}
+	}
+
+isolation_level_opt:
+	/* empty */
+	{
+		$$ = ""
+	}
+|	',' isolation_level
+	{
+		$$ = $2
+	}
+
+isolation_level:
+	ISOLATION LEVEL isolation_types
+	{
+		$$ = $3
+	}
+
+isolation_types:
+	REPEATABLE READ
+	{
+		$$ = RepeatableRead
+	}
+|	READ COMMITTED
+	{
+		$$ = ReadCommitted
+	}
+|	READ UNCOMMITTED
+	{
+		$$ = ReadUncommitted
+	}
+|	SERIALIZABLE
+	{
+		$$ = Serializable
+	}
+
+access_mode_opt:
+	/* empty */
+	{
+		$$ = ""
+	}
+|	',' access_mode
+	{
+		$$ = $2
+	}
+
+access_mode:
+	READ WRITE
+	{
+		$$ = TxReadWrite
+	}
+|	READ ONLY
+	{
+		$$ = TxReadOnly
+	}
+
+set_session_or_global:
+	LOCAL
+    {
+		$$ = SessionStr
+	}
+|	SESSION
+	{
+		$$ = SessionStr
+	}
+|	GLOBAL
+	{
+		$$ = GlobalStr
 	}
 
 for_from:
@@ -3648,6 +4397,7 @@ reserved_keyword:
 |	CHARSET
 |	COLLATE
 |	COLUMNS
+|	COMPRESSION
 |	CONVERT
 |	CREATE
 |	CROSS
@@ -3766,33 +4516,60 @@ reserved_keyword:
 non_reserved_keyword:
 	AGAINST
 |	ALGORITHM
+|	AVG_ROW_LENGTH
 |	BIT
 |	BOOL
+|	BOOLEAN
 |	CLEANUP
 |	COMMENT_KEYWORD
+|   COLUMN_FORMAT
+|   CONNECTION
+|	DATA
 |	DATE
 |	DATETIME
+|   DELAY_KEY_WRITE
+|	DIRECTORY
+|	DISK
 |	DOUBLE
 |	DUPLICATE
+|	DYNAMIC
 |	ENUM
 |	ENGINE
 |	EXPANSION
 |	FIELDS
+|	FIXED
 |	FLOAT_TYPE
 |	FULLTEXT
+|	GEOMETRY
+|	GEOMETRYCOLLECTION
 |	GLOBAL
+|   INSERT_METHOD
 |	JSON
+|   KEY_BLOCK_SIZE
 |	LANGUAGE
 |	LAST_INSERT_ID
+|	LINESTRING
+|   MAX_ROWS
 |	MODE
+|	MEMORY
+|   MIN_ROWS
+|	MULTILINESTRING
+|	MULTIPOINT
+|	MULTIPOLYGON
 |	NCHAR
 |	OFFSET
+|   PACK_KEYS
+|   PASSWORD
+|	POINT
+|	POLYGON
 |	QUERY
 |	REPAIR
+|	ROW_FORMAT
 |	SHARE
 |	SIGNED
 |	SINGLE
 |	STATUS
+|	STORAGE
 |	TEXT
 |	TIME
 |	TIMESTAMP
