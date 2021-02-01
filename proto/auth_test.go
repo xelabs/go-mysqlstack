@@ -198,6 +198,28 @@ func TestAuthWithoutSecure(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
+func TestAuthWithoutPluginAuth(t *testing.T) {
+	want := NewAuth()
+	want.charset = 0x02
+	want.authResponseLen = 20
+	want.clientFlags = DefaultClientCapability ^ sqldb.CLIENT_PLUGIN_AUTH
+	want.authResponse = nativePassword("sbtest", DefaultSalt)
+	want.user = "sbtest"
+	want.database = "test_db"
+
+	got := NewAuth()
+	err := got.UnPack(want.Pack(
+		DefaultClientCapability,
+		0x02,
+		"sbtest",
+		"sbtest",
+		DefaultSalt,
+		"",
+	))
+	assert.Nil(t, err)
+	assert.Equal(t, got.pluginName, DefaultAuthPluginName)
+}
+
 func TestAuthUnPackError(t *testing.T) {
 	capabilityFlags := DefaultClientCapability
 	capabilityFlags |= sqldb.CLIENT_PROTOCOL_41
