@@ -113,9 +113,12 @@ func (a *Auth) UnPack(payload []byte) error {
 		if a.pluginName, err = buf.ReadStringNUL(); err != nil {
 			return fmt.Errorf("auth.unpack: can't read pluginName")
 		}
-	}
-	if a.pluginName != DefaultAuthPluginName {
-		return fmt.Errorf("invalid authPluginName, got %v but only support %v", a.pluginName, DefaultAuthPluginName)
+		if a.pluginName != DefaultAuthPluginName {
+			return fmt.Errorf("invalid authPluginName, got '%s' but only support %s", a.pluginName, DefaultAuthPluginName)
+		}
+	} else {
+		// Allow fallback to default auth plugin
+		a.pluginName = DefaultAuthPluginName
 	}
 	return nil
 }
