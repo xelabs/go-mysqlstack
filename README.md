@@ -38,4 +38,4 @@ go-mysqlstack is production ready.
 
 ## License
 
-go-mysqlstack is released under the GPLv3. See LICENSE
+go-mysqlstack is released under the BSD-3-Clause License. See [LICENSE](https://github.com/xelabs/go-mysqlstack/blob/master/LICENSE)
